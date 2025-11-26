@@ -48,10 +48,12 @@ def inject_otel_context_to_meta(ctx: otel_context.Context | None = None) -> McpT
     inject(carrier, context=ctx)
 
     meta: McpTraceMeta = {}
-    for key in ("traceparent", "tracestate", "baggage"):
-        value = carrier.get(key)
-        if isinstance(value, str) and value:
-            meta[key] = value
+    if carrier.get("traceparent"):
+        meta["traceparent"] = carrier["traceparent"]
+    if carrier.get("tracestate"):
+        meta["tracestate"] = carrier["tracestate"]
+    if carrier.get("baggage"):
+        meta["baggage"] = carrier["baggage"]
     return meta
 
 

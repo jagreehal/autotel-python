@@ -5,8 +5,8 @@ from collections.abc import Callable
 from typing import Any
 
 try:
-    from django.conf import settings  # type: ignore[import-not-found]
-    from django.utils.deprecation import MiddlewareMixin  # type: ignore[import-not-found]
+    from django.conf import settings
+    from django.utils.deprecation import MiddlewareMixin
 except ImportError:
     settings = None
     MiddlewareMixin = object
