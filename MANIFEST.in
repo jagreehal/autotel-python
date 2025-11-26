@@ -1,0 +1,10 @@
+include README.md
+include LICENSE
+include CHANGELOG.md
+include MIGRATION.md
+include pyproject.toml
+recursive-include examples *.py
+recursive-include tests *.py
+global-exclude __pycache__
+global-exclude *.py[co]
+global-exclude .DS_Store
