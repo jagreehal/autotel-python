@@ -101,7 +101,8 @@ async def summarize_user(ctx, profile: UserProfile) -> UserSummary:
 
     ctx.add_event("ai.summary.completed")
 
-    return result.data
+    # In pydantic-ai 1.19.0+, use result.output instead of result.data
+    return result.output
 
 
 @trace

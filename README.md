@@ -963,12 +963,170 @@ Shutdown ensures:
 - Subscribers are properly closed
 - No data loss
 
+## Serverless Support
+
+autotel automatically detects serverless environments and can auto-flush telemetry before function exit.
+
+```python
+from autotel import is_serverless, auto_flush_if_serverless, shutdown_sync
+
+# Check if running in serverless
+if is_serverless():
+    print("Running in serverless environment")
+
+# Auto-register flush on exit (only in serverless environments)
+auto_flush_if_serverless(lambda: shutdown_sync(timeout=5.0))
+```
+
+Supported environments:
+- AWS Lambda (`AWS_LAMBDA_FUNCTION_NAME`)
+- Google Cloud Functions (`FUNCTION_NAME`)
+- Azure Functions (`AZURE_FUNCTIONS_ENVIRONMENT`)
+
+## OpenLLMetry Integration
+
+Auto-instrument LLM SDKs (OpenAI, Anthropic, LangChain, LlamaIndex) via [OpenLLMetry/Traceloop](https://github.com/traceloop/openllmetry):
+
+```python
+from autotel import configure_openllmetry
+
+configure_openllmetry(
+    api_endpoint="https://api.traceloop.com",
+    api_key="your_api_key",
+)
+```
+
+This automatically instruments:
+- OpenAI SDK
+- Anthropic SDK
+- LangChain
+- LlamaIndex
+
+Requires: `pip install traceloop`
+
+## Validation
+
+Validate event names and attributes to catch issues before they reach your observability backend:
+
+```python
+from autotel import ValidationConfig, Validator, set_validator
+
+# Configure validation rules
+config = ValidationConfig(
+    max_event_name_length=100,
+    max_attribute_length=1000,
+    max_nesting_depth=5,
+    sensitive_patterns={
+        "email": r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",
+        "ssn": r"\d{3}-\d{2}-\d{4}",
+    },
+    graceful_degradation=True,  # Log warnings instead of raising exceptions
+)
+
+validator = Validator(config)
+set_validator(validator)
+
+# Validate manually
+validator.validate_event_name("user.signup")  # True
+validator.validate_attribute("email", "test@example.com")  # False (sensitive data)
+```
+
+## Advanced TraceContext Methods
+
+The `ctx` parameter provides additional methods beyond basic attribute setting:
+
+```python
+from autotel import trace
+from opentelemetry.trace import Link, SpanContext
+
+@trace
+async def advanced_operation(ctx, data):
+    # Update span name dynamically
+    ctx.update_name(f"process.{data['type']}")
+
+    # Check if span is recording (useful for expensive computations)
+    if ctx.is_recording():
+        ctx.set_attribute("expensive.data", compute_expensive_value())
+
+    # Set span status explicitly
+    from opentelemetry.trace import StatusCode
+    ctx.set_status(StatusCode.OK, "Operation completed")
+
+    # Add links to related spans (for batch processing, fan-out, etc.)
+    ctx.add_link(other_span_context, {"relationship": "batch_member"})
+
+    # Batch set multiple attributes
+    ctx.set_attributes({
+        "item.count": len(data["items"]),
+        "item.total_size": sum(i["size"] for i in data["items"]),
+    })
+
+    return result
+```
+
+## Debug Utilities
+
+Development helpers for debugging telemetry:
+
+```python
+from autotel import (
+    is_production,
+    should_enable_debug,
+    DebugPrinter,
+    set_debug_printer,
+)
+
+# Check environment
+if not is_production():
+    print("Running in development mode")
+
+# Auto-detect debug mode (enabled in non-production)
+debug_enabled = should_enable_debug()  # True if ENVIRONMENT != "production"
+
+# Debug printer for console output
+printer = DebugPrinter(enabled=True)
+set_debug_printer(printer)
+
+# Prints span/metric/event data to console
+printer.print_span({"name": "my.operation", "attributes": {"key": "value"}})
+```
+
+## Isolated Tracer Provider (Library Authors)
+
+For library authors who want to provide observability without requiring users to set up OpenTelemetry:
+
+```python
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
+from autotel import set_autotel_tracer_provider, get_autotel_tracer
+
+# Create isolated provider for your library
+provider = TracerProvider()
+provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
+set_autotel_tracer_provider(provider)
+
+# Get tracer (uses isolated provider if set, otherwise global)
+tracer = get_autotel_tracer(__name__, version="1.0.0")
+
+# Use in your library
+with tracer.start_as_current_span("library.operation") as span:
+    span.set_attribute("key", "value")
+```
+
+Use cases:
+- Libraries that ship with embedded autotel
+- SDKs that want observability without requiring users to set up OTEL
+- Testing scenarios with isolated trace collection
+- Multiple subsystems with different exporters
+
+**Note:** Context (trace IDs, parent spans) is still shared globally due to OpenTelemetry's global context propagation mechanism. This only isolates the tracer provider, not the entire OTEL pipeline.
+
 ## Complete Feature List
 
 ### Core Features
 - ✅ One-line initialization with environment variable support
 - ✅ Ergonomic `@trace` decorator (sync & async)
-- ✅ `TraceContext` for span operations
+- ✅ `TraceContext` for span operations (including `add_link`, `update_name`, `is_recording`)
 - ✅ Functional API (`instrument()`, `span()`, `with_new_context()`)
 - ✅ Baggage support (`with_baggage()`, `ctx.get_baggage()`, automatic span attributes)
 
@@ -978,6 +1136,7 @@ Shutdown ensures:
 - ✅ Global `track()` function
 - ✅ Auto-enrichment with trace context
 - ✅ Queue-based event system with circuit breaker protection
+- ✅ Event validation (`ValidationConfig`, `Validator`)
 
 ### Logging
 - ✅ Bring your own logger (standard logging, structlog, loguru)
@@ -989,21 +1148,26 @@ Shutdown ensures:
 - ✅ Rate limiting (token bucket)
 - ✅ Circuit breaker (subscriber protection)
 - ✅ PII redaction (email, phone, SSN, credit card, API keys)
+- ✅ Serverless auto-flush (AWS Lambda, GCP Functions, Azure Functions)
 
 ### Framework Integrations
 - ✅ FastAPI middleware
 - ✅ Django middleware
 - ✅ Flask integration
+- ✅ OpenLLMetry integration (OpenAI, Anthropic, LangChain, LlamaIndex)
 
 ### Instrumentation Helpers
 - ✅ HTTP instrumentation (`@http_instrumented`, `trace_http_request()`)
 - ✅ Database instrumentation (`instrument_database()`, `trace_db_query()`)
 - ✅ W3C Trace Context propagation
+- ✅ MCP context propagation (`instrument_mcp_client()`, `instrument_mcp_server()`)
 
-### Testing
+### Testing & Development
 - ✅ InMemorySpanExporter for unit tests
 - ✅ Test helpers (`assert_trace_created()`, `assert_trace_succeeded()`, etc.)
 - ✅ ConsoleSpanExporter for debugging
+- ✅ Debug utilities (`DebugPrinter`, `is_production()`, `should_enable_debug()`)
+- ✅ Isolated tracer provider for library authors
 
 ## Comparison with Raw OpenTelemetry
 
@@ -1018,6 +1182,9 @@ Shutdown ensures:
 | PII redaction | ❌ | ✅ Built-in |
 | Product events | ❌ | ✅ Built-in |
 | Logging integration | Manual | ✅ Automatic |
+| Serverless auto-flush | ❌ | ✅ Built-in |
+| LLM instrumentation | Manual setup | ✅ OpenLLMetry integration |
+| Event validation | ❌ | ✅ Built-in |
 
 ## Status
 

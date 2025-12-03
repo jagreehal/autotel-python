@@ -12,10 +12,10 @@ PROJECT_ROOT = Path(__file__).parent.parent
 # Add src to path
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from autotel import init, span, trace, track
-from autotel.exporters import InMemorySpanExporter
-from autotel.processors import SimpleSpanProcessor
-from autotel.testing import (
+from autotel import init, span, trace, track  # noqa: E402
+from autotel.exporters import InMemorySpanExporter  # noqa: E402
+from autotel.processors import SimpleSpanProcessor  # noqa: E402
+from autotel.testing import (  # noqa: E402
     assert_no_errors,
     assert_trace_succeeded,
 )

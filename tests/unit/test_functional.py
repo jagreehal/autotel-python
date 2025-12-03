@@ -1,6 +1,7 @@
 """Tests for functional API."""
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import pytest
 
@@ -112,7 +113,7 @@ def test_instrument_with_context_parameter(exporter: Any) -> None:
 
 def test_trace_func_immediate_execution(exporter: Any) -> None:
     """Test trace_func with immediate execution pattern."""
-    result = trace_func(lambda ctx: "success")
+    result = trace_func(lambda ctx: "success")  # noqa: ARG005
     assert result == "success"
 
     spans = exporter.get_finished_spans()
@@ -125,7 +126,7 @@ def test_trace_func_factory_pattern(exporter: Any) -> None:
     """Test trace_func with factory pattern."""
     # Factory pattern: returns a function
     create_user: Callable[[dict[str, Any]], dict[str, Any]] = trace_func(
-        lambda ctx: lambda data: {"id": data.get("id"), "processed": True}
+        lambda ctx: lambda data: {"id": data.get("id"), "processed": True}  # noqa: ARG005
     )
 
     result = create_user({"id": "123"})

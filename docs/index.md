@@ -42,6 +42,9 @@ async def create_user(ctx, data):
 - ✅ PII redaction: built-in PII detection and redaction
 - ✅ Baggage support: context propagation with `with_baggage()`
 - ✅ Framework integrations: FastAPI, Django, Flask middleware
+- ✅ Serverless support: AWS Lambda, Google Cloud Functions, Azure Functions
+- ✅ OpenLLMetry integration: auto-instrument LLM SDKs
+- ✅ Validation utilities: event name and attribute validation
 
 ## Contents
 
@@ -50,27 +53,6 @@ async def create_user(ctx, data):
 :caption: User Guide
 
 quickstart
-usage
-production
-integrations
-```
-
-```{toctree}
-:maxdepth: 2
-:caption: API Reference
-
-api/core
-api/decorators
-api/production
-api/integrations
-```
-
-```{toctree}
-:maxdepth: 1
-:caption: Development
-
-contributing
-changelog
 ```
 
 ## Indices and tables

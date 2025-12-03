@@ -2,11 +2,28 @@
 
 import asyncio
 import os
+from pathlib import Path
+
+# Load .env file if it exists (for OpenAI API key)
+try:
+    from dotenv import load_dotenv
+    
+    # Try to load from project root first, then from examples/pydantic_ai
+    project_root = Path(__file__).parent.parent.parent
+    env_file = project_root / ".env"
+    if not env_file.exists():
+        env_file = Path(__file__).parent / ".env"
+    if env_file.exists():
+        load_dotenv(env_file)
+except ImportError:
+    pass  # python-dotenv not installed, skip .env loading
 
 # Set OpenAI base URL to point to Ollama's OpenAI-compatible endpoint
-# Ollama doesn't require an API key, but OpenAI client needs one set
-os.environ.setdefault("OPENAI_BASE_URL", "http://localhost:11434/v1")
-os.environ.setdefault("OPENAI_API_KEY", "ollama")  # Dummy key for Ollama
+# If OPENAI_API_KEY is set in .env or environment, use OpenAI
+# Otherwise, use Ollama (default)
+if not os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY") == "ollama":
+    os.environ.setdefault("OPENAI_BASE_URL", "http://localhost:11434/v1")
+    os.environ.setdefault("OPENAI_API_KEY", "ollama")  # Dummy key for Ollama
 
 from pydantic_ai import Agent
 
@@ -18,8 +35,16 @@ init(
     span_processor=SimpleSpanProcessor(ConsoleSpanExporter()),
 )
 
-# Create agent with Ollama via OpenAI-compatible API
-agent = Agent("openai:llama3.2")
+# Create agent - uses OpenAI if OPENAI_API_KEY is set, otherwise Ollama
+# For OpenAI, use: Agent("openai:gpt-4o-mini") or Agent("openai:gpt-4")
+# For Ollama, use: Agent("openai:llama3.2") (requires Ollama running)
+use_openai = os.getenv("OPENAI_API_KEY") and os.getenv("OPENAI_API_KEY") != "ollama"
+if use_openai:
+    agent = Agent("openai:gpt-4o-mini")  # Use OpenAI gpt-4o-mini
+    print("Using OpenAI with gpt-4o-mini")
+else:
+    agent = Agent("openai:llama3.2")  # Use Ollama
+    print("Using Ollama with llama3.2")
 
 
 @trace
@@ -29,8 +54,14 @@ async def ask_ai(ctx, question: str) -> str:
 
     Automatically traced by autotel!
     """
-    ctx.set_attribute("ai.model", "llama3.2:latest")
-    ctx.set_attribute("ai.provider", "ollama")
+    # Detect provider from agent
+    use_openai = os.getenv("OPENAI_API_KEY") and os.getenv("OPENAI_API_KEY") != "ollama"
+    if use_openai:
+        ctx.set_attribute("ai.model", "gpt-4o-mini")
+        ctx.set_attribute("ai.provider", "openai")
+    else:
+        ctx.set_attribute("ai.model", "llama3.2:latest")
+        ctx.set_attribute("ai.provider", "ollama")
     ctx.set_attribute("user.question", question)
 
     result = await agent.run(question)

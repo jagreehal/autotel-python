@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Span links** - `add_link()` and `add_links()` methods for linking related spans
 - **Dynamic span naming** - `update_name()` method for renaming spans after creation
 - **Recording check** - `is_recording()` method to check if span is recording (useful for avoiding expensive computation)
+- **PostHogSubscriber enhancements**:
+  - `serverless=True` mode for AWS Lambda/Vercel (shorter timeout)
+  - `filter_none_values=True` (default) removes None from properties
+  - `on_error` callback for custom error handling
 
 ### Fixed
 - Fixed name shadowing bug in `functional.py` where `trace` function shadowed `opentelemetry.trace` module
