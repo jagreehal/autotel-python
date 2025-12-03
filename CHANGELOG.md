@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-12-03
+
 ### Added
 - **Array attributes support** - `set_attribute()` now accepts homogeneous arrays (`list[str]`, `list[int]`, `list[float]`, `list[bool]`)
 - **Batch attributes** - `set_attributes()` method for setting multiple attributes at once
@@ -54,4 +56,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Migration guide from manual OpenTelemetry
 - Clear error messages and validation
 
+[0.2.0]: https://github.com/jagreehal/autotel-python/releases/tag/v0.2.0
 [0.1.0]: https://github.com/jagreehal/autotel-python/releases/tag/v0.1.0
