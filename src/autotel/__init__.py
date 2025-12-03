@@ -19,7 +19,7 @@ from .debug import (
 from .decorators import trace
 from .events import Event, EventSubscriber
 from .exporters import ConsoleSpanExporter, InMemorySpanExporter
-from .functional import instrument, span, with_baggage, with_new_context
+from .functional import instrument, span, trace as trace_func, with_baggage, with_new_context
 from .helpers import (
     add_event,
     get_all_baggage,
@@ -110,6 +110,7 @@ __all__ = [
     # Functional API
     "instrument",
     "span",
+    "trace_func",
     "with_new_context",
     "with_baggage",
     # Convenience Helpers

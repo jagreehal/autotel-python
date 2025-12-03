@@ -7,9 +7,12 @@ from contextlib import contextmanager
 from functools import lru_cache
 from typing import Any, ParamSpec, TypeVar
 
-from opentelemetry import context, trace
+from opentelemetry import context
+from opentelemetry import trace as otel_trace
+from opentelemetry.trace import StatusCode
 
 from .context import TraceContext
+from .operation_context import run_in_operation_context
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -76,7 +79,7 @@ def span(name: str) -> Any:
     """
     from .operation_context import run_in_operation_context
 
-    tracer = trace.get_tracer(__name__)
+    tracer = otel_trace.get_tracer(__name__)
     # Set operation context for events auto-enrichment
     with run_in_operation_context(name), tracer.start_as_current_span(name) as otel_span:
         yield TraceContext(otel_span)
@@ -101,6 +104,244 @@ def with_new_context() -> Any:
         yield
     finally:
         context.detach(token)
+
+
+def trace(
+    fn: Callable[..., Any],
+    *,
+    name: str | None = None,
+) -> Any:
+    """
+    Functional API that supports both factory and immediate execution patterns.
+
+    Factory pattern: Returns a wrapped function
+        >>> create_user = trace(lambda ctx: lambda data: create(data))
+        >>> user = create_user({"id": "123"})
+
+    Immediate execution: Executes immediately
+        >>> result = trace(lambda ctx: create_user({"id": "123"}))
+
+    IMPORTANT: Pattern detection uses inspect.signature() to inspect function
+    signatures WITHOUT executing the function. This avoids side effects that could
+    occur if the function starts coroutines or performs work during pattern detection
+    (similar to the Node.js async function bug where calling async functions for
+    pattern detection would cause them to start executing synchronously until the
+    first await).
+
+    The fix: We use inspect.signature() to inspect the function signature and
+    determine if it's a factory pattern (returns a function) or immediate execution
+    (returns a value), without ever calling the function during detection.
+
+    Args:
+        fn: Function to trace. Can be:
+            - Factory pattern: func(ctx: TraceContext) -> Callable[..., T]
+            - Immediate execution: func(ctx: TraceContext) -> T
+        name: Optional span name. If not provided, inferred from function.
+
+    Returns:
+        For factory pattern: Returns a wrapped function
+        For immediate execution: Returns the result of executing the function
+    """
+    # Use inspect.signature() to detect pattern WITHOUT executing the function
+    sig = inspect.signature(fn)
+    params = list(sig.parameters.keys())
+
+    # Check if first parameter is TraceContext-compatible
+    needs_ctx = len(params) > 0 and params[0].lower() in ("ctx", "context", "tracecontext")
+
+    # IMPORTANT: For async/coroutine functions, we skip probing entirely and assume
+    # immediate execution. This is because:
+    # - Factory pattern: `(ctx) => async (...args) => result` - outer function is SYNC
+    # - Immediate execution: `async (ctx) => result` - function itself is ASYNC
+    #
+    # Probing async functions by executing them causes side effects (like creating
+    # orphan spans) because the async function starts executing synchronously until
+    # the first await.
+    if inspect.iscoroutinefunction(fn):
+        is_factory = False
+    else:
+        # For sync functions, check return type annotation to detect factory pattern
+        return_annotation = sig.return_annotation
+
+        # Detect if return type is a Callable (factory pattern)
+        # Only explicit Callable[...] type hints trigger factory pattern
+        is_factory = (
+            return_annotation != inspect.Signature.empty
+            and hasattr(return_annotation, "__origin__")
+            and return_annotation.__origin__ is Callable
+        )
+
+        # If we can't determine from annotation, assume immediate execution
+        # (safer default - avoids potential side effects from probing)
+
+    # Infer span name
+    span_name = name or _infer_name(fn)
+
+    if is_factory:
+        # Factory pattern: return a wrapped function
+        return _wrap_factory(fn, span_name, needs_ctx)
+    else:
+        # Immediate execution pattern: execute immediately
+        return _execute_immediately(fn, span_name, needs_ctx)
+
+
+def _wrap_factory(
+    fn: Callable[..., Any],
+    span_name: str,
+    needs_ctx: bool,
+) -> Callable[..., Any]:
+    """Wrap a factory function that returns another function."""
+    # Create wrapper that will be called with the factory's arguments
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        tracer = otel_trace.get_tracer(__name__)
+        with (
+            run_in_operation_context(span_name),
+            tracer.start_as_current_span(span_name) as otel_span,
+        ):
+            try:
+                # Create TraceContext
+                ctx = TraceContext(otel_span)
+
+                # Call the factory function with TraceContext
+                # Note: Pattern detection already happened using inspect.signature()
+                # (no execution), so we know this is a factory pattern.
+                # We only call it here to get the returned function, not for detection.
+                factory_result = fn(ctx, *args, **kwargs) if needs_ctx else fn(*args, **kwargs)
+
+                # Check if result is actually a function (runtime validation)
+                if not callable(factory_result):
+                    raise TypeError(
+                        f"Factory function expected to return a callable, "
+                        f"got {type(factory_result).__name__}"
+                    )
+
+                # Call the returned function
+                result = factory_result()
+
+                # Handle errors
+                if isinstance(result, tuple) and len(result) > 0:
+                    # Check if last element is an error
+                    last = result[-1]
+                    if isinstance(last, Exception):
+                        otel_span.record_exception(last)
+                        otel_span.set_status(StatusCode.ERROR, str(last))
+                        raise last
+
+                return result
+            except Exception as e:
+                otel_span.record_exception(e)
+                otel_span.set_status(StatusCode.ERROR, str(e))
+                raise
+
+    # Create async wrapper if factory function is async
+    if inspect.iscoroutinefunction(fn):
+        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+            tracer = otel_trace.get_tracer(__name__)
+            with (
+                run_in_operation_context(span_name),
+                tracer.start_as_current_span(span_name) as otel_span,
+            ):
+                try:
+                    ctx = TraceContext(otel_span)
+                    if needs_ctx:
+                        factory_result = await fn(ctx, *args, **kwargs)
+                    else:
+                        factory_result = await fn(*args, **kwargs)
+
+                    if not callable(factory_result):
+                        raise TypeError(
+                            f"Factory function expected to return a callable, "
+                            f"got {type(factory_result).__name__}"
+                        )
+
+                    # Call the returned function (could be sync or async)
+                    if inspect.iscoroutinefunction(factory_result):
+                        result = await factory_result()
+                    else:
+                        result = factory_result()
+
+                    if isinstance(result, tuple) and len(result) > 0:
+                        last = result[-1]
+                        if isinstance(last, Exception):
+                            otel_span.record_exception(last)
+                            otel_span.set_status(StatusCode.ERROR, str(last))
+                            raise last
+
+                    return result
+                except Exception as e:
+                    otel_span.record_exception(e)
+                    otel_span.set_status(StatusCode.ERROR, str(e))
+                    raise
+
+        return async_wrapper
+
+    return wrapper
+
+
+def _execute_immediately(
+    fn: Callable[..., Any],
+    span_name: str,
+    needs_ctx: bool,
+) -> Any:
+    """Execute a function immediately within a trace."""
+    # Handle async functions
+    if inspect.iscoroutinefunction(fn):
+        async def async_executor() -> Any:
+            tracer = otel_trace.get_tracer(__name__)
+            with (
+                run_in_operation_context(span_name),
+                tracer.start_as_current_span(span_name) as otel_span,
+            ):
+                try:
+                    if needs_ctx:
+                        ctx = TraceContext(otel_span)
+                        result = await fn(ctx)
+                    else:
+                        result = await fn()
+
+                    # Handle errors
+                    if isinstance(result, tuple) and len(result) > 0:
+                        last = result[-1]
+                        if isinstance(last, Exception):
+                            otel_span.record_exception(last)
+                            otel_span.set_status(StatusCode.ERROR, str(last))
+                            raise last
+
+                    return result
+                except Exception as e:
+                    otel_span.record_exception(e)
+                    otel_span.set_status(StatusCode.ERROR, str(e))
+                    raise
+
+        # Return a coroutine that needs to be awaited
+        return async_executor()
+
+    # Handle sync functions
+    tracer = otel_trace.get_tracer(__name__)
+    with (
+        run_in_operation_context(span_name),
+        tracer.start_as_current_span(span_name) as otel_span,
+    ):
+        try:
+            if needs_ctx:
+                ctx = TraceContext(otel_span)
+                result = fn(ctx)
+            else:
+                result = fn()
+
+            # Handle errors
+            if isinstance(result, tuple) and len(result) > 0:
+                last = result[-1]
+                if isinstance(last, Exception):
+                    otel_span.record_exception(last)
+                    otel_span.set_status(StatusCode.ERROR, str(last))
+                    raise last
+
+            return result
+        except Exception as e:
+            otel_span.record_exception(e)
+            otel_span.set_status(StatusCode.ERROR, str(e))
+            raise
 
 
 @contextmanager

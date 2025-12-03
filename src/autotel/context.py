@@ -1,8 +1,22 @@
 """TraceContext class for ergonomic span operations."""
 
+from collections.abc import Mapping, Sequence
+
 from opentelemetry import context, trace
 from opentelemetry.baggage import propagation
-from opentelemetry.trace import Span, StatusCode
+from opentelemetry.trace import Link, Span, SpanContext, StatusCode
+
+# OpenTelemetry attribute value types - primitives and homogeneous sequences
+AttributeValue = (
+    str
+    | int
+    | float
+    | bool
+    | Sequence[str]
+    | Sequence[int]
+    | Sequence[float]
+    | Sequence[bool]
+)
 
 
 class TraceContext:
@@ -11,9 +25,28 @@ class TraceContext:
     def __init__(self, span: Span) -> None:
         self._span = span
 
-    def set_attribute(self, key: str, value: str | int | float | bool) -> None:
-        """Set a span attribute."""
+    def set_attribute(self, key: str, value: AttributeValue) -> None:
+        """
+        Set a span attribute.
+
+        Supports primitive values and homogeneous arrays per OpenTelemetry spec.
+
+        Args:
+            key: Attribute key
+            value: Primitive (str, int, float, bool) or homogeneous array
+        """
         self._span.set_attribute(key, value)
+
+    def set_attributes(self, attributes: Mapping[str, AttributeValue]) -> None:
+        """
+        Set multiple span attributes at once.
+
+        More efficient than multiple set_attribute() calls for batch updates.
+
+        Args:
+            attributes: Dictionary of attribute key-value pairs
+        """
+        self._span.set_attributes(dict(attributes))
 
     def add_event(
         self, name: str, attributes: dict[str, str | int | float | bool] | None = None
@@ -28,6 +61,60 @@ class TraceContext:
     def record_exception(self, exception: Exception) -> None:
         """Record an exception."""
         self._span.record_exception(exception)
+
+    def add_link(
+        self,
+        span_context: SpanContext,
+        attributes: Mapping[str, AttributeValue] | None = None,
+    ) -> None:
+        """
+        Add a link to another span.
+
+        Links establish relationships between spans that may not have a
+        parent-child relationship (e.g., batch processing, fan-out operations).
+
+        Note: In OpenTelemetry, links are typically added at span creation time.
+        Adding links after creation may not be supported by all backends.
+
+        Args:
+            span_context: The SpanContext of the span to link to
+            attributes: Optional attributes for this link
+        """
+        self._span.add_link(span_context, dict(attributes) if attributes else None)
+
+    def add_links(self, links: Sequence[Link]) -> None:
+        """
+        Add multiple links to other spans.
+
+        Args:
+            links: Sequence of Link objects to add
+        """
+        for link in links:
+            self._span.add_link(link.context, dict(link.attributes) if link.attributes else None)
+
+    def update_name(self, name: str) -> None:
+        """
+        Update the span name dynamically.
+
+        Useful when the final operation name isn't known until later
+        (e.g., after parsing a request or determining the handler).
+
+        Args:
+            name: New name for the span
+        """
+        self._span.update_name(name)
+
+    def is_recording(self) -> bool:
+        """
+        Check if this span is recording events.
+
+        Returns False if the span is a no-op span (e.g., due to sampling).
+        Useful for avoiding expensive attribute computation when not needed.
+
+        Returns:
+            True if the span is recording, False otherwise
+        """
+        return self._span.is_recording()
 
     @property
     def span_id(self) -> str:

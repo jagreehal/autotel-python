@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Array attributes support** - `set_attribute()` now accepts homogeneous arrays (`list[str]`, `list[int]`, `list[float]`, `list[bool]`)
+- **Batch attributes** - `set_attributes()` method for setting multiple attributes at once
+- **Span links** - `add_link()` and `add_links()` methods for linking related spans
+- **Dynamic span naming** - `update_name()` method for renaming spans after creation
+- **Recording check** - `is_recording()` method to check if span is recording (useful for avoiding expensive computation)
+
+### Fixed
+- Fixed name shadowing bug in `functional.py` where `trace` function shadowed `opentelemetry.trace` module
+
 ## [0.1.0] - 2025-11-26
 
 ### Initial Release
