@@ -271,8 +271,20 @@ app = Flask(__name__)
 init_autotel(app, service="my-flask-app")
 ```
 
+## Serverless Support
+
+autotel automatically detects serverless environments:
+
+```python
+from autotel import is_serverless, auto_flush_if_serverless, shutdown_sync
+
+# Auto-register flush on exit (only in serverless environments)
+auto_flush_if_serverless(lambda: shutdown_sync(timeout=5.0))
+```
+
+Supported: AWS Lambda, Google Cloud Functions, Azure Functions.
+
 ## Next Steps
 
-- Learn about [production configuration](production.md)
-- Explore [framework integrations](integrations.md)
-- Check out the [API reference](api/core.md)
+- See the full [README](../README.md) for complete documentation
+- Explore [examples](../examples/) for real-world usage patterns

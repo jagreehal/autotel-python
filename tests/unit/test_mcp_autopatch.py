@@ -50,9 +50,9 @@ def fake_agents_module() -> Generator[None, None, None]:
 @pytest.mark.asyncio
 async def test_auto_patch_instruments_fake_fastmcp(exporter: InMemorySpanExporter) -> None:
     """Auto-instrumentation should patch MCPServer-like classes when present."""
-    from agents.mcp import MCPServer  # type: ignore[import-not-found]
+    from agents.mcp import MCPServer
 
-    server = MCPServer()
+    server = MCPServer()  # type: ignore[abstract]
     assert getattr(server, "__autotel_mcp_server__", False) is True
 
     tracer = trace.get_tracer(__name__)
@@ -64,8 +64,8 @@ async def test_auto_patch_instruments_fake_fastmcp(exporter: InMemorySpanExporte
             "trace_id": format(span.get_span_context().trace_id, "032x"),
         }
 
-    server.register_tool("echo", {}, handler)
-    wrapped = server.handlers["echo"]
+    server.register_tool("echo", {}, handler)  # type: ignore[attr-defined]
+    wrapped = server.handlers["echo"]  # type: ignore[attr-defined]
 
     with tracer.start_as_current_span("parent") as parent:
         parent_trace_id = format(parent.get_span_context().trace_id, "032x")

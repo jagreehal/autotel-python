@@ -24,7 +24,7 @@ def app(exporter: Any) -> Any:
     init(service="test-api", span_processor=SimpleSpanProcessor(exporter))
 
     app = FastAPI()
-    app.add_middleware(autotelMiddleware, service="test-api")
+    app.add_middleware(autotelMiddleware, service="test-api")  # type: ignore[arg-type]
 
     @app.get("/")
     def read_root() -> dict[str, str]:

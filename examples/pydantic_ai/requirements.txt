@@ -1,3 +1,4 @@
 autotel>=0.1.0
 pydantic-ai>=1.19.0
 ollama>=0.6.0
+python-dotenv>=1.0.0

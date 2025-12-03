@@ -5,8 +5,6 @@ autotel handles all context propagation automatically!
 From 135 lines to ~5 lines.
 """
 
-from typing import Any
-
 import autotel
 
 

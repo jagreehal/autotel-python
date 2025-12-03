@@ -1,10 +1,11 @@
 """Tests for functional API."""
 
+from collections.abc import Callable
 from typing import Any
 
 import pytest
 
-from autotel import init, instrument, span, with_new_context
+from autotel import init, instrument, span, trace_func, with_new_context
 from autotel.exporters import InMemorySpanExporter
 from autotel.processors import SimpleSpanProcessor
 
@@ -108,3 +109,90 @@ def test_instrument_with_context_parameter(exporter: Any) -> None:
     assert spans[0].name == "create"
     assert spans[0].attributes is not None
     assert spans[0].attributes.get("user.id") == "123"
+
+
+def test_trace_func_immediate_execution(exporter: Any) -> None:
+    """Test trace_func with immediate execution pattern."""
+    result = trace_func(lambda ctx: "success")  # noqa: ARG005
+    assert result == "success"
+
+    spans = exporter.get_finished_spans()
+    assert len(spans) == 1
+    # Lambda functions get "unnamed" as their inferred name (by design)
+    assert spans[0].name == "unnamed"
+
+
+def test_trace_func_factory_pattern(exporter: Any) -> None:
+    """Test trace_func with factory pattern."""
+    # Factory pattern: returns a function
+    create_user: Callable[[dict[str, Any]], dict[str, Any]] = trace_func(
+        lambda ctx: lambda data: {"id": data.get("id"), "processed": True}  # noqa: ARG005
+    )
+
+    result = create_user({"id": "123"})
+    assert result == {"id": "123", "processed": True}
+
+    spans = exporter.get_finished_spans()
+    assert len(spans) == 1
+    # Lambda functions get "unnamed" as their inferred name (by design)
+    assert spans[0].name == "unnamed"
+
+
+def test_trace_func_no_orphan_spans(exporter: Any) -> None:
+    """Test that pattern detection doesn't create orphan spans."""
+    # This test verifies that pattern detection using inspect.signature()
+    # doesn't create orphan spans. In the Node.js version, calling async
+    # functions during pattern detection would cause them to start executing,
+    # creating orphan spans. In Python, we use inspect.signature() to inspect
+    # types without executing functions.
+
+    execution_count = 0
+
+    def immediate_func(ctx: Any) -> int:
+        nonlocal execution_count
+        execution_count += 1
+        ctx.set_attribute("execution.count", execution_count)
+        return execution_count
+
+    result = trace_func(immediate_func)
+    assert result == 1
+    assert execution_count == 1, "Function should execute exactly once, not during pattern detection"
+
+    # Verify we have exactly one span
+    spans = exporter.get_finished_spans()
+    assert len(spans) == 1, "Should have exactly 1 span, not multiple from pattern detection"
+
+
+@pytest.mark.asyncio
+async def test_trace_func_async_immediate_execution(exporter: Any) -> None:
+    """Test trace_func with async immediate execution pattern."""
+    async def async_func(ctx: Any) -> str:
+        ctx.set_attribute("async", True)
+        return "done"
+
+    result = await trace_func(async_func)
+    assert result == "done"
+
+    spans = exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].attributes is not None
+    assert spans[0].attributes.get("async") is True
+
+
+@pytest.mark.asyncio
+async def test_trace_func_async_no_double_execution(exporter: Any) -> None:
+    """Test that async functions don't execute twice during pattern detection."""
+    execution_count = 0
+
+    async def async_func(ctx: Any) -> int:
+        nonlocal execution_count
+        execution_count += 1
+        ctx.set_attribute("execution.count", execution_count)
+        return execution_count
+
+    result = await trace_func(async_func)
+    assert result == 1
+    assert execution_count == 1, "Async function should execute exactly once, not during pattern detection"
+
+    spans = exporter.get_finished_spans()
+    assert len(spans) == 1, "Should have exactly 1 span, not multiple from pattern detection"

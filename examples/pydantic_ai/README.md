@@ -4,10 +4,25 @@ This example demonstrates how to use Pydantic AI with Ollama and Llama3.2, integ
 
 ## Prerequisites
 
+You can use either **OpenAI** or **Ollama**:
+
+### Option 1: Using OpenAI (Recommended)
+
+1. Create a `.env` file in the project root (`/Users/jreehal/dev/python/autotel-python/.env`):
+   ```bash
+   OPENAI_API_KEY=sk-your-key-here
+   ```
+
+### Option 2: Using Ollama (Local)
+
 1. **Install Ollama**: https://ollama.ai
 2. **Pull Llama3.2 model**:
    ```bash
    ollama pull llama3.2
+   ```
+3. **Start Ollama**:
+   ```bash
+   ollama serve
    ```
 
 ## Installation
