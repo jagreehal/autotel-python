@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-05-30
+
+### Documentation
+- Added a grouped `init()` configuration reference (`docs/configuration.md`) and a "minimal vs advanced" Configuration section in the README, so advanced parameters (`devtools`, `span_processor_mode`, samplers, redactors, …) are discoverable without grepping the source.
+- Framed the "value compounds" positioning: the one-line setup is the entry point; the same `init()` is where product events, enrichment, sampling, and PII redaction are opted into as you grow.
+- Fixed a duplicate `## Why autotel` heading in the README.
+
 ## [0.4.0] - 2026-05-30
 
 ### Changed

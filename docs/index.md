@@ -60,6 +60,7 @@ async def create_user(ctx, data):
 :caption: User Guide
 
 quickstart
+configuration
 ```
 
 ## Indices and tables
