@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-05-30
+
+### Changed
+- CI: bumped `actions/checkout` to v5 and `actions/setup-python` to v6 so workflows run on Node 24 (Node 20 actions are deprecated). No package/runtime changes.
+
 ## [0.3.0] - 2026-05-30
 
 ### Fixed
