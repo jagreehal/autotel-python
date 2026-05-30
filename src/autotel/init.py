@@ -197,7 +197,7 @@ def init(
     metric_readers: list[MetricReader] | None = None,  # Multiple metric readers
     log_record_processors: list[LogRecordProcessor] | None = None,  # Multiple log processors
     sampler: AdaptiveSampler | None = None,  # Adaptive sampling
-    debug: bool | None = None,  # Debug mode (None = auto-detect)
+    debug: bool | None = None,  # Console span output; opt-in (None/False = off)
     auto_flush: bool = False,  # Auto-flush for serverless
     preset: dict[str, Any] | None = None,  # Preset configuration (Datadog, Honeycomb)
     validation: dict[str, Any] | None = None,  # Validation configuration (ValidationConfig)
@@ -256,7 +256,9 @@ def init(
         metric_readers: Custom metric readers (e.g., OTLP + Prometheus)
         log_record_processors: Custom log record processors for OTEL logs
         sampler: Adaptive sampler
-        debug: Enable debug mode (None = auto-detect)
+        debug: Enable console span output. Opt-in: pass ``debug=True`` to print
+            spans to the console. Defaults to off (``None``/``False``) so a
+            plain ``init()`` in notebooks, scripts, and CLIs stays quiet.
         auto_flush: Auto-flush for serverless environments
         preset: Preset configuration (from presets module)
         validation: Validation configuration
