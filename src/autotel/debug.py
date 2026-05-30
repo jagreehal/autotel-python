@@ -21,22 +21,21 @@ def is_production() -> bool:
 
 def should_enable_debug(debug: bool | None = None) -> bool:
     """
-    Determine if debug mode should be enabled.
+    Determine if debug (console span) output should be enabled.
+
+    Debug output is opt-in: it is OFF unless the caller explicitly passes
+    ``debug=True``. A plain ``init()`` — including in notebooks, scripts, and
+    CLIs — stays quiet so the first thing a new user sees isn't console noise
+    they didn't ask for.
 
     Args:
-        debug: Explicit debug flag (None = auto-detect)
+        debug: Explicit debug flag. ``True`` enables console output; ``False``
+            or ``None`` (the default) leaves it disabled.
 
     Returns:
-        True if debug should be enabled
+        True only when ``debug`` is explicitly True.
     """
-    if debug is False:
-        return False
-
-    if debug is True:
-        return True
-
-    # Auto-detect: enable in non-production environments
-    return not is_production()
+    return debug is True
 
 
 class DebugPrinter:
@@ -87,8 +86,8 @@ class DebugPrinter:
 _debug_printer: DebugPrinter | None = None
 
 
-def set_debug_printer(printer: DebugPrinter) -> None:
-    """Set global debug printer."""
+def set_debug_printer(printer: DebugPrinter | None) -> None:
+    """Set (or clear, with ``None``) the global debug printer."""
     global _debug_printer
     _debug_printer = printer
 

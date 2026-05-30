@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.3.1] - 2026-05-30
+## [0.4.0] - 2026-05-30
+
+### Changed
+- **Debug/console output is now opt-in.** Previously `init()` auto-enabled console span output in any non-production environment, so a plain `init()` in a notebook, script, or CLI printed spans the user never asked for. Console output is now off unless you explicitly pass `debug=True`.
+
+  **Migration:** if you relied on automatic console spans during local development, pass `debug=True` explicitly:
+  ```python
+  init(service="my-app", debug=True)
+  ```
 
 ### Changed
 - CI: bumped `actions/checkout` to v5 and `actions/setup-python` to v6 so workflows run on Node 24 (Node 20 actions are deprecated). No package/runtime changes.
