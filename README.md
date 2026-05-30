@@ -67,7 +67,37 @@ async def process_order(ctx, order):
 
 Every span, metric, log, and event includes `traceId`, `spanId`, `operation.name`, `service.version`, and `deployment.environment` automatically.
 
-## Why autotel
+## Configuration: minimal vs advanced
+
+The happy path is genuinely one line:
+
+```python
+init(service="checkout-api")                       # reads OTEL_* env vars
+init(service="checkout-api", endpoint="https://otlp.example.com")
+```
+
+`init()` accepts many more parameters, but **you only reach for them when a
+specific need shows up** — the defaults are sensible and quiet. The breadth
+isn't complexity for its own sake: it's where the value compounds. The same
+`init()` call is the single place you later opt into product events, automatic
+enrichment, adaptive sampling, PII redaction, and custom export pipelines —
+without rewiring anything you already wrote.
+
+Common advanced knobs:
+
+| Need | Parameter |
+|---|---|
+| Print spans to the console while developing | `debug=True` (opt-in; off by default) |
+| Local visualization via autotel-devtools | `devtools=True` |
+| Product analytics / alerting destinations | `subscribers=[...]` |
+| Redact PII from span attributes | `attribute_redactor="default"` (or `strict`/`pci-dss`) |
+| Tail / adaptive sampling | `sampler=AdaptiveSampler(...)` |
+| Drop or rename completed spans | `span_filter=...`, `span_name_normalizer="rest-api"` |
+| Immediate export (serverless) | `auto_flush=True`, `span_processor_mode="simple"` |
+
+See the full, grouped reference in [docs/configuration.md](docs/configuration.md).
+
+## Less boilerplate
 
 OpenTelemetry requires substantial boilerplate. Real-world examples show 60-90% of code is instrumentation, not business logic.
 
