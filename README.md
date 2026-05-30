@@ -513,6 +513,225 @@ Automatically adds:
 
 See [`examples/basic/semantic_helpers_example.py`](./examples/basic/semantic_helpers_example.py) for complete examples.
 
+## Event-Driven Observability
+
+### Webhook/Parking Lot Pattern
+
+When initiating async operations that return hours/days later (webhooks, payment callbacks, human approvals), you can't keep a span open. The Parking Lot pattern "parks" trace context and retrieves it when callbacks arrive.
+
+```python
+from autotel import init
+from autotel.webhook import create_parking_lot, InMemoryTraceContextStore
+
+init(service="payment-service")
+
+# Create parking lot with in-memory storage (use Redis/DynamoDB in production)
+parking_lot = create_parking_lot(
+    store=InMemoryTraceContextStore(),
+    default_ttl_seconds=86400,  # 24 hours
+)
+
+# When initiating payment
+@trace
+async def initiate_payment(ctx, order_id: str):
+    # Park the current trace context
+    await parking_lot.park(f"payment:{order_id}", metadata={"order_id": order_id})
+    await stripe_client.create_payment_intent(metadata={"order_id": order_id})
+
+# When Stripe webhook arrives (hours later)
+@parking_lot.trace_callback(
+    name="stripe.webhook.payment_intent.succeeded",
+    correlation_key_from=lambda event: f"payment:{event['data']['object']['metadata']['order_id']}",
+)
+async def handle_stripe_webhook(ctx, event: dict):
+    # ctx.parked_context contains the original trace context
+    # ctx.elapsed_ms shows time since payment was initiated
+    print(f"Payment completed after {ctx.elapsed_ms}ms")
+    await fulfill_order(event["data"]["object"])
+```
+
+**Key features:**
+- `CallbackContext` provides `parked_context`, `elapsed_ms`, and `correlation_key`
+- Original span is linked via span links (visible in trace UI)
+- Pluggable storage via `TraceContextStore` interface (implement for Redis, DynamoDB, etc.)
+- TTL-based expiration for cleanup
+
+### Distributed Workflow Tracing
+
+Track workflows spanning multiple microservices by propagating workflow identity via W3C baggage in message headers.
+
+```python
+# Service A: Order Service
+from autotel import trace_distributed_workflow, trace_producer
+
+@trace_distributed_workflow(
+    name="OrderFulfillment",
+    workflow_id_from=lambda order: order["id"],
+    version="1.0.0",
+)
+async def create_order(ctx, order: dict):
+    # Workflow baggage is auto-set: workflow.id, workflow.name, workflow.version
+    print(f"Started workflow {ctx.workflow_id}")
+    await publish_to_inventory(order)
+
+@trace_producer(system="kafka", destination="inventory-requests")
+async def publish_to_inventory(ctx, order):
+    headers = ctx.inject_headers()  # Includes workflow.* baggage
+    await producer.send(topic="inventory-requests", value=order, headers=headers)
+
+# Service B: Inventory Service
+from autotel import trace_distributed_step
+
+@trace_distributed_step(name="ReserveInventory")
+async def process_inventory(ctx, message):
+    # ctx.workflow_id is propagated from Service A
+    # ctx.workflow_name === "OrderFulfillment"
+    print(f"Processing step for workflow {ctx.workflow_id}")
+    await reserve_items(message["items"])
+```
+
+**Key features:**
+- `DistributedWorkflowContext` provides `workflow_id`, `workflow_name`, `workflow_version`, `step_name`, `step_index`
+- `WorkflowBaggage` is a pre-built safe schema with validation
+- Automatic step indexing and progress tracking
+- Priority levels: `low`, `normal`, `high`, `critical`
+- Helper functions: `generate_workflow_id()`, `get_workflow_progress()`, `is_in_distributed_workflow()`
+
+### Messaging Adapters
+
+Pre-built adapters for common messaging systems with system-specific attributes:
+
+```python
+from autotel import trace_consumer
+from autotel.messaging_adapters import nats_adapter, temporal_adapter
+
+# NATS JetStream
+@trace_consumer(
+    system="nats",
+    destination="orders",
+    headers_from=nats_adapter.headers_from,
+    custom_attributes=nats_adapter.custom_attributes,
+)
+async def process_nats_message(ctx, msg):
+    # Automatic attributes: messaging.nats.subject, messaging.nats.stream
+    await handle_order(msg.data)
+
+# Temporal Workflow
+@trace_consumer(
+    system="temporal",
+    destination="order-workflow",
+    headers_from=temporal_adapter.headers_from,
+    custom_attributes=temporal_adapter.custom_attributes,
+)
+async def process_temporal_activity(ctx, info, payload):
+    # Automatic attributes: temporal.workflow_id, temporal.run_id, temporal.activity_id
+    await process_activity(payload)
+```
+
+**Available adapters:**
+- `nats_adapter` - NATS JetStream with subject/stream attributes
+- `temporal_adapter` - Temporal workflow engine integration
+- `cloudflare_queues_adapter` - Cloudflare Queues support
+- `sqs_adapter` - AWS SQS with message attributes
+- `redis_streams_adapter` - Redis Streams with stream/group tracking
+
+### Context Extractors (Multi-Vendor)
+
+Parse trace context from non-W3C header formats (Datadog, Zipkin B3, AWS X-Ray, Jaeger):
+
+```python
+from autotel import trace_consumer
+from autotel.messaging_adapters import (
+    datadog_context_extractor,
+    b3_context_extractor,
+    xray_context_extractor,
+    default_multi_format_extractor,
+)
+
+# Single format (Datadog)
+@trace_consumer(
+    system="kafka",
+    destination="events",
+    custom_context_extractor=datadog_context_extractor,
+)
+async def process_datadog_message(ctx, msg):
+    # Parent span from x-datadog-trace-id/x-datadog-parent-id headers
+    pass
+
+# Multi-format (try W3C, then Datadog, then B3)
+@trace_consumer(
+    system="kafka",
+    destination="events",
+    custom_context_extractor=default_multi_format_extractor,
+)
+async def process_any_message(ctx, msg):
+    # Works with W3C traceparent, Datadog, or B3 headers
+    pass
+```
+
+**Available extractors:**
+- `datadog_context_extractor` - `x-datadog-trace-id`, `x-datadog-parent-id`
+- `b3_context_extractor` - Zipkin B3 (single header `b3` or multi-header)
+- `xray_context_extractor` - AWS X-Ray `X-Amzn-Trace-Id`
+- `jaeger_context_extractor` - Jaeger `uber-trace-id`
+- `create_multi_format_extractor()` - Custom format chain
+- `default_multi_format_extractor` - W3C → Datadog → B3 → X-Ray → Jaeger
+
+### Enhanced Messaging Context
+
+`ProducerContext` and `ConsumerContext` provide rich helpers for message-driven systems:
+
+```python
+from autotel import trace_producer, trace_consumer, DLQOptions, OrderingConfig
+
+# Producer with automatic header injection
+@trace_producer(system="kafka", destination="orders")
+async def publish_order(ctx, order: dict):
+    headers = ctx.inject_headers()  # W3C traceparent + baggage
+    await producer.send("orders", value=order, headers=headers)
+
+# Consumer with DLQ and retry helpers
+@trace_consumer(
+    system="kafka",
+    destination="orders",
+    dlq_options=DLQOptions(
+        dlq_destination="orders-dlq",
+        max_retries=3,
+        should_dlq=lambda msg, error, retries: retries >= 3,
+    ),
+    ordering_config=OrderingConfig(
+        ordering_key_from=lambda msg: msg.get("order_id"),
+        detect_duplicates=True,
+    ),
+)
+async def process_order(ctx, message: dict):
+    # Check for duplicates
+    if ctx.is_duplicate():
+        return  # Skip duplicate
+
+    try:
+        await handle_order(message)
+    except Exception as e:
+        if ctx.should_retry():
+            delay = ctx.get_retry_delay()  # Exponential backoff
+            await schedule_retry(message, delay)
+        elif ctx.should_dlq(e):
+            await ctx.send_to_dlq(message, reason=str(e))
+        raise
+```
+
+**ProducerContext methods:**
+- `inject_headers()` - Inject W3C traceparent + baggage into message headers
+
+**ConsumerContext methods:**
+- `should_dlq(error)` - Check if message should go to DLQ
+- `send_to_dlq(message, reason)` - Send message to dead-letter queue
+- `record_dlq_decision(decision, reason)` - Record DLQ decision as span event
+- `should_retry()` - Check if retry is available
+- `get_retry_delay()` - Get exponential backoff delay
+- `is_duplicate()` - Check for duplicate messages
+- `get_out_of_order_info()` - Get out-of-order message details
+
 ### Batch instrumentation
 
 ```python
@@ -822,6 +1041,64 @@ Then just call `init()` with no parameters:
 from autotel import init
 init()  # Reads all config from environment variables!
 ```
+
+### Local autotel-devtools
+
+For local traces, metrics, and logs in autotel-devtools without hand-wiring OTLP exporters:
+
+```python
+from autotel import init
+
+init(service="my-app", devtools=True)
+```
+
+If port `4318` is already in use locally:
+
+```python
+init(service="my-app", devtools={"port": 4319})
+```
+
+For notebooks or short scripts where spans should export immediately:
+
+```python
+init(
+    service="pydantic-ai-workshop",
+    devtools={"port": 4319},
+    span_processor_mode="simple",
+    pydantic_ai=True,
+)
+```
+
+### Migrate from Raw OpenTelemetry
+
+Most manual OTEL setup can collapse to one call. Keep your existing collector endpoint,
+headers, and resource metadata in the standard OTEL formats:
+
+```python
+from autotel import init
+
+init(
+    service="checkout-api",
+    endpoint="https://collector.example.com:4318",
+    headers="authorization=Bearer token,x-honeycomb-team=abc123",
+    resource_attributes="service.version=1.8.0,deployment.environment=prod,team=payments",
+    metrics=True,
+    logs=True,
+    span_name_normalizer="rest-api",
+    attribute_redactor="default",
+    span_filter=lambda span: "/health" not in span.name,
+)
+```
+
+Useful migration switches:
+
+- `metrics=True` and `logs=True` add OTLP metrics/logs alongside traces.
+- `traces_endpoint=...`, `metrics_endpoint=...`, and `logs_endpoint=...` accept signal-specific OTEL endpoints and env vars.
+- `span_processor_mode="simple"` exports immediately for notebooks, CLIs, and demos.
+- `span_name_normalizer="rest-api"` reduces high-cardinality span names such as `/users/123`.
+- `attribute_redactor="default"` masks secrets, emails, phone numbers, SSNs, and card numbers before export.
+- `resource=existing_resource` lets raw OTel users reuse an existing `opentelemetry.sdk.resources.Resource`.
+- `pydantic_ai=True` replaces manual `Agent.instrument_all()` wiring.
 
 ### Adaptive Sampling
 
@@ -1169,6 +1446,16 @@ Use cases:
 - ✅ Debug utilities (`DebugPrinter`, `is_production()`, `should_enable_debug()`)
 - ✅ Isolated tracer provider for library authors
 
+### Event-Driven Observability
+- ✅ Webhook/Parking Lot pattern (`ParkingLot`, `@trace_callback`)
+- ✅ Distributed workflow tracing (`@trace_distributed_workflow`, `@trace_distributed_step`)
+- ✅ Messaging adapters (NATS, Temporal, Cloudflare Queues, SQS, Redis Streams)
+- ✅ Context extractors (Datadog, B3, X-Ray, Jaeger)
+- ✅ Enhanced messaging context (`ProducerContext`, `ConsumerContext`)
+- ✅ DLQ and retry helpers (dead-letter queues, exponential backoff)
+- ✅ Message ordering and deduplication
+- ✅ Safe baggage schema (`create_safe_baggage_schema()`)
+
 ## Comparison with Raw OpenTelemetry
 
 | Feature | Raw OpenTelemetry | autotel |
@@ -1177,6 +1464,9 @@ Use cases:
 | Decorator API | `@tracer.start_as_current_span("name")` | `@trace` |
 | Context access | `trace.get_current_span()` | `ctx` parameter |
 | Env config | Manual parsing | Automatic (`OTEL_*` vars) |
+| OTLP traces/metrics/logs | Separate providers/exporters/readers | `init(..., metrics=True, logs=True)` |
+| Local devtools | Manual endpoint/exporter setup | `init(..., devtools=True)` |
+| High-cardinality span names | Custom processor code | `span_name_normalizer="rest-api"` |
 | Adaptive sampling | ❌ (collector only) | ✅ Built-in |
 | Rate limiting | ❌ | ✅ Built-in |
 | PII redaction | ❌ | ✅ Built-in |
@@ -1185,13 +1475,16 @@ Use cases:
 | Serverless auto-flush | ❌ | ✅ Built-in |
 | LLM instrumentation | Manual setup | ✅ OpenLLMetry integration |
 | Event validation | ❌ | ✅ Built-in |
+| Webhook/Parking Lot | ❌ | ✅ Built-in |
+| Distributed workflows | ❌ | ✅ Built-in |
+| Multi-vendor context | ❌ | ✅ Datadog, B3, X-Ray, Jaeger |
 
 ## Status
 
 Production ready. All core features implemented and tested.
 
-**Version:** 0.1.0  
-**Python:** 3.10+  
+**Version:** 0.2.0
+**Python:** 3.10+
 **License:** MIT
 
 ## License

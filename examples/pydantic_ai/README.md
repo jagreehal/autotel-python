@@ -128,7 +128,21 @@ from autotel import init
 
 init(
     service="pydantic-ai-app",
-    endpoint="http://localhost:4318",  # OTLP endpoint
+    endpoint="http://localhost:4318",  # autotel adds /v1/traces for HTTP
+    pydantic_ai=True,
+)
+```
+
+### Using autotel-devtools
+
+```python
+from autotel import init
+
+init(
+    service="pydantic-ai-workshop",
+    devtools={"port": 4319},  # use 4318 by default; 4319 avoids Cursor conflicts
+    span_processor_mode="simple",
+    pydantic_ai=True,
 )
 ```
 

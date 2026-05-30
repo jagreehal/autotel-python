@@ -191,6 +191,7 @@ def _wrap_factory(
     needs_ctx: bool,
 ) -> Callable[..., Any]:
     """Wrap a factory function that returns another function."""
+
     # Create wrapper that will be called with the factory's arguments
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         tracer = otel_trace.get_tracer(__name__)
@@ -235,6 +236,7 @@ def _wrap_factory(
 
     # Create async wrapper if factory function is async
     if inspect.iscoroutinefunction(fn):
+
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
             tracer = otel_trace.get_tracer(__name__)
             with (
@@ -286,6 +288,7 @@ def _execute_immediately(
     """Execute a function immediately within a trace."""
     # Handle async functions
     if inspect.iscoroutinefunction(fn):
+
         async def async_executor() -> Any:
             tracer = otel_trace.get_tracer(__name__)
             with (

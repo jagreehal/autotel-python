@@ -32,7 +32,51 @@ init(service="my-app", endpoint="http://localhost:4318")
 **Configuration options:**
 - Environment variables: `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, etc.
 - Explicit parameters override env vars
+- HTTP endpoints are normalized to `/v1/traces`, `/v1/metrics`, and `/v1/logs`
 - Defaults to `http://localhost:4318`
+
+For local autotel-devtools with traces, metrics, and logs:
+
+```python
+from autotel import init
+
+init(service="my-app", devtools=True)
+```
+
+If port `4318` is already taken:
+
+```python
+init(service="my-app", devtools={"port": 4319})
+```
+
+### Migrating Existing OpenTelemetry Setup
+
+You can pass the same OTEL-style strings you already use in environment variables:
+
+```python
+from autotel import init
+
+init(
+    service="checkout-api",
+    endpoint="http://collector:4318",
+    headers="authorization=Bearer token,x-honeycomb-team=abc123",
+    resource_attributes="service.version=1.8.0,deployment.environment=prod",
+    metrics=True,
+    logs=True,
+    span_name_normalizer="rest-api",
+    attribute_redactor="default",
+    span_filter=lambda span: "/health" not in span.name,
+)
+```
+
+For split collectors, use `traces_endpoint`, `metrics_endpoint`, and `logs_endpoint`,
+or the standard `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`,
+`OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`, and `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`
+environment variables.
+
+If you already build an OpenTelemetry `Resource`, pass it as `resource=existing_resource`.
+autotel merges it with `service`, `service_version`, `environment`, and
+`resource_attributes`.
 
 You can also use environment variables exclusively:
 
@@ -283,6 +327,70 @@ auto_flush_if_serverless(lambda: shutdown_sync(timeout=5.0))
 ```
 
 Supported: AWS Lambda, Google Cloud Functions, Azure Functions.
+
+## Event-Driven Observability
+
+### Webhook/Parking Lot Pattern
+
+"Park" trace context for async callbacks that arrive hours/days later:
+
+```python
+from autotel.webhook import create_parking_lot, InMemoryTraceContextStore
+
+parking_lot = create_parking_lot(
+    store=InMemoryTraceContextStore(),
+    default_ttl_seconds=86400,  # 24 hours
+)
+
+# When initiating async operation
+@trace
+async def initiate_payment(ctx, order_id: str):
+    await parking_lot.park(f"payment:{order_id}")
+    await stripe.create_payment_intent(...)
+
+# When webhook arrives (hours later)
+@parking_lot.trace_callback(
+    name="stripe.webhook",
+    correlation_key_from=lambda e: f"payment:{e['order_id']}",
+)
+async def handle_webhook(ctx, event):
+    print(f"Completed after {ctx.elapsed_ms}ms")
+```
+
+### Distributed Workflow Tracing
+
+Track workflows spanning multiple microservices:
+
+```python
+from autotel import trace_distributed_workflow, trace_distributed_step
+
+# Service A
+@trace_distributed_workflow(name="OrderFulfillment", workflow_id_from=lambda o: o["id"])
+async def create_order(ctx, order):
+    await publish_to_inventory(order)  # Baggage auto-propagates
+
+# Service B
+@trace_distributed_step(name="ReserveInventory")
+async def process_inventory(ctx, message):
+    print(f"Processing workflow {ctx.workflow_id}")
+```
+
+### Multi-Vendor Context Extractors
+
+Parse trace context from non-W3C headers:
+
+```python
+from autotel import trace_consumer
+from autotel.messaging_adapters import default_multi_format_extractor
+
+@trace_consumer(
+    system="kafka",
+    destination="events",
+    custom_context_extractor=default_multi_format_extractor,  # W3C, Datadog, B3, X-Ray, Jaeger
+)
+async def process_message(ctx, msg):
+    pass
+```
 
 ## Next Steps
 

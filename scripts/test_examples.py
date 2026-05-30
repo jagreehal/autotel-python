@@ -162,8 +162,8 @@ def test_events_example() -> None:
     async def run_test():
         await create_user({"email": "test@example.com"})
         await process_order("order-123", 99.99)
-        # Give events time to process
-        await asyncio.sleep(0.2)
+        # Give events time to process (subscriber queue is async)
+        await asyncio.sleep(1.0)
         return True
 
     asyncio.run(run_test())
@@ -280,6 +280,145 @@ def test_shutdown_example() -> None:
     print("✅ Shutdown example works!\n")
 
 
+def test_parking_lot_example() -> None:
+    """Test parking lot (webhook) pattern."""
+    print("Testing parking lot example...")
+
+    exporter = InMemorySpanExporter()
+    init(
+        service="test-parking-lot",
+        span_processor=SimpleSpanProcessor(exporter),
+    )
+
+    from autotel.webhook import (
+        InMemoryTraceContextStore,
+        create_parking_lot,
+    )
+
+    store = InMemoryTraceContextStore(cleanup_interval_seconds=0)
+    parking_lot = create_parking_lot(store=store, default_ttl_seconds=3600)
+
+    @trace
+    async def initiate(correlation_key: str) -> None:
+        await parking_lot.park(correlation_key, metadata={"k": "v"})
+
+    @parking_lot.trace_callback(
+        name="webhook.handler",
+        correlation_key_from=lambda event: event["key"],
+    )
+    async def handle_webhook(ctx, event: dict) -> str:
+        return "ok" if ctx.parked_context else "miss"
+
+    async def run_test() -> None:
+        await initiate("payment:ord-1")
+        result = await handle_webhook({"key": "payment:ord-1"})
+        assert result == "ok"
+        result_miss = await handle_webhook({"key": "payment:unknown"})
+        assert result_miss == "miss"
+
+    asyncio.run(run_test())
+
+    spans = exporter.get_finished_spans()
+    assert len(spans) >= 2
+    assert_trace_succeeded(exporter, "initiate")
+    assert_no_errors(exporter)
+    print("✅ Parking lot example works!\n")
+
+
+def test_distributed_workflow_example() -> None:
+    """Test distributed workflow tracing."""
+    print("Testing distributed workflow example...")
+
+    exporter = InMemorySpanExporter()
+    init(
+        service="test-distributed-workflow",
+        span_processor=SimpleSpanProcessor(exporter),
+    )
+
+    from autotel.workflow_distributed import (
+        trace_distributed_step,
+        trace_distributed_workflow,
+    )
+    from opentelemetry import context
+    from autotel.workflow_distributed import WorkflowBaggage, WorkflowBaggageValues
+
+    @trace_distributed_workflow(
+        name="DemoWorkflow",
+        workflow_id_from=lambda order: order["id"],
+        version="1.0",
+    )
+    async def create_order(ctx, order: dict) -> dict:
+        return {"workflow_id": ctx.workflow_id}
+
+    @trace_distributed_step(name="StepOne")
+    async def step_one(ctx, request: dict) -> str:
+        return "done"
+
+    async def run_test() -> None:
+        result = await create_order({"id": "wf-1"})
+        assert result["workflow_id"] == "wf-1"
+        baggage = WorkflowBaggageValues(
+            workflow_id="wf-1",
+            workflow_name="DemoWorkflow",
+            step_index=1,
+            total_steps=2,
+        )
+        token = context.attach(WorkflowBaggage.set(None, baggage.to_dict()))
+        try:
+            await step_one({})
+        finally:
+            context.detach(token)
+
+    asyncio.run(run_test())
+
+    spans = exporter.get_finished_spans()
+    assert len(spans) >= 2
+    workflow_span = next((s for s in spans if "workflow.DemoWorkflow" in s.name), None)
+    assert workflow_span is not None
+    assert_no_errors(exporter)
+    print("✅ Distributed workflow example works!\n")
+
+
+def test_messaging_adapters_example() -> None:
+    """Test messaging consumer with adapter attributes."""
+    print("Testing messaging adapters example...")
+
+    exporter = InMemorySpanExporter()
+    init(
+        service="test-messaging-adapters",
+        span_processor=SimpleSpanProcessor(exporter),
+    )
+
+    from autotel.messaging import trace_consumer
+    from autotel.messaging_adapters import nats_adapter
+
+    class MockMsg:
+        subject = "orders.created"
+        headers = {"traceparent": "00-0abcdef0123456789012345678901234-0123456789abcdef-01"}
+        info = type("Info", (), {"stream": "S1", "consumer": "C1"})()
+
+    @trace_consumer(system="nats", destination="orders.created", headers_key="headers")
+    async def process_order(ctx, msg: MockMsg) -> str:
+        attrs = nats_adapter.consumer.custom_attributes(ctx, msg)
+        if attrs:
+            for k, v in attrs.items():
+                ctx.set_attribute(k, v)
+        return "ok"
+
+    async def run_test() -> None:
+        result = await process_order(MockMsg())
+        assert result == "ok"
+
+    asyncio.run(run_test())
+
+    spans = exporter.get_finished_spans()
+    assert len(spans) >= 1
+    span = next((s for s in spans if "receive" in s.name), spans[0])
+    assert span.attributes.get("messaging.system") == "nats"
+    assert_no_errors(exporter)
+    print("✅ Messaging adapters example works!\n")
+
+
 def main() -> None:
     """Run all example tests."""
     print("=" * 60)
@@ -292,6 +431,9 @@ def main() -> None:
         test_events_example,
         test_complete_example,
         test_shutdown_example,
+        test_parking_lot_example,
+        test_distributed_workflow_example,
+        test_messaging_adapters_example,
     ]
 
     passed = 0

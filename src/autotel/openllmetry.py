@@ -37,7 +37,7 @@ def configure_openllmetry(
         return
 
     try:
-        import traceloop  # type: ignore[import-not-found]
+        import traceloop
     except ImportError:
         logger.warning("traceloop not installed. Install with: pip install traceloop")
         return

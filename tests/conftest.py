@@ -4,7 +4,9 @@ from contextlib import suppress
 from typing import Any
 
 import pytest
-from opentelemetry import trace
+from opentelemetry import _logs, metrics, trace
+from opentelemetry.sdk._logs import LoggerProvider
+from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.trace import TracerProvider
 
 
@@ -15,6 +17,7 @@ def clean_otel() -> Any:
     import autotel.init as init_module
 
     init_module._INITIALIZED = False  # noqa: SLF001
+    _reset_metrics_and_logs()
 
     yield
 
@@ -42,6 +45,28 @@ def clean_otel() -> Any:
 
         # Reset initialization flag
         init_module._INITIALIZED = False  # noqa: SLF001
+        _reset_metrics_and_logs()
     except Exception:
         # If reset fails, that's okay for tests
         pass
+
+
+def _reset_metrics_and_logs() -> None:
+    """Reset OTel metrics/logs globals so tests can reinitialize cleanly."""
+    with suppress(Exception):
+        current_meter_provider = metrics.get_meter_provider()
+        if isinstance(current_meter_provider, MeterProvider):
+            current_meter_provider.shutdown()
+    with suppress(Exception):
+        current_logger_provider = _logs.get_logger_provider()
+        if isinstance(current_logger_provider, LoggerProvider):
+            current_logger_provider.shutdown()  # type: ignore[no-untyped-call]
+
+    with suppress(Exception):
+        metrics._internal._METER_PROVIDER = None  # noqa: SLF001
+        metrics._internal._METER_PROVIDER_SET_ONCE = metrics._internal.Once()  # noqa: SLF001
+        metrics._internal._PROXY_METER_PROVIDER._real_meter_provider = None  # noqa: SLF001
+        metrics._internal._PROXY_METER_PROVIDER._meters.clear()  # noqa: SLF001
+    with suppress(Exception):
+        _logs._internal._LOGGER_PROVIDER = None  # noqa: SLF001
+        _logs._internal._LOGGER_PROVIDER_SET_ONCE = _logs._internal.Once()  # noqa: SLF001
