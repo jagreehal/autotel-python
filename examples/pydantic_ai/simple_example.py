@@ -7,7 +7,7 @@ from pathlib import Path
 # Load .env file if it exists (for OpenAI API key)
 try:
     from dotenv import load_dotenv
-    
+
     # Try to load from project root first, then from examples/pydantic_ai
     project_root = Path(__file__).parent.parent.parent
     env_file = project_root / ".env"
@@ -27,12 +27,14 @@ if not os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY") == "ollama":
 
 from pydantic_ai import Agent
 
-from autotel import ConsoleSpanExporter, SimpleSpanProcessor, init, trace
+from autotel import init, trace
 
 # Initialize autotel (one line!)
 init(
     service="pydantic-ai-simple",
-    span_processor=SimpleSpanProcessor(ConsoleSpanExporter()),
+    devtools={"port": 4319},  # Use 4319 when 4318 is already taken locally.
+    span_processor_mode="simple",  # Immediate export is nice for notebooks/scripts.
+    pydantic_ai=True,
 )
 
 # Create agent - uses OpenAI if OPENAI_API_KEY is set, otherwise Ollama

@@ -6,6 +6,16 @@ One-line initialization, ergonomic decorators, and production-ready by default.
 
 from .__version__ import __version__
 from .baggage_span_processor import BaggageSpanProcessor
+from .business_baggage import (
+    BaggageFieldDefinition,
+    BusinessBaggage,
+    BusinessBaggageConfig,
+    SafeBaggageSchema,
+    configure_business_baggage,
+    create_safe_baggage_schema,
+    define_business_baggage,
+    get_business_baggage,
+)
 from .circuit_breaker import CircuitBreaker, CircuitState
 from .context import TraceContext
 from .db import instrument_database, trace_db_query
@@ -21,6 +31,21 @@ from .events import Event, EventSubscriber
 from .exporters import ConsoleSpanExporter, InMemorySpanExporter
 from .functional import instrument, span, with_baggage, with_new_context
 from .functional import trace as trace_func
+from .gen_ai_cost import (
+    GEN_AI_COST_ATTRIBUTE,
+    MODEL_PRICING,
+    ModelPricing,
+    TokenUsage,
+    estimate_llm_cost,
+    record_llm_cost,
+)
+from .gen_ai_events import (
+    record_gen_ai_retry,
+    record_prompt_sent,
+    record_response_received,
+    record_stream_first_token,
+    record_tool_call,
+)
 from .helpers import (
     add_event,
     get_all_baggage,
@@ -45,6 +70,44 @@ from .mcp import (
     instrument_mcp_client,
     instrument_mcp_server,
 )
+from .messaging import (
+    ConsumerContext,
+    ConsumerGroupState,
+    ConsumerGroupTrackingConfig,
+    DLQOptions,
+    DLQReplayOptions,
+    OrderingConfig,
+    OutOfOrderInfo,
+    PartitionAssignment,
+    PartitionLag,
+    ProducerContext,
+    RebalanceEvent,
+    clear_ordering_state,
+    extract_trace_context,
+    inject_trace_headers,
+    record_consumer_lag,
+    record_dlq,
+    record_retry,
+    trace_batch_consumer,
+    trace_consumer,
+    trace_producer,
+)
+from .messaging_adapters import (
+    ConsumerAdapter,
+    MessagingAdapter,
+    ProducerAdapter,
+    b3_context_extractor,
+    cloudflare_queues_adapter,
+    create_multi_format_extractor,
+    datadog_context_extractor,
+    default_multi_format_extractor,
+    jaeger_context_extractor,
+    nats_adapter,
+    redis_streams_adapter,
+    sqs_adapter,
+    temporal_adapter,
+    xray_context_extractor,
+)
 from .metrics import (
     Metric,
     MetricsCollector,
@@ -64,6 +127,24 @@ from .sampling import AdaptiveSampler, AdaptiveSamplingProcessor
 from .semantic_helpers import trace_db, trace_http, trace_llm, trace_messaging
 from .serverless import auto_flush_if_serverless, is_serverless, register_auto_flush
 from .shutdown import shutdown, shutdown_sync
+from .span_processors import (
+    AttributeRedactingProcessor,
+    AttributeRedactorConfig,
+    FilteringSpanProcessor,
+    SpanNameNormalizingProcessor,
+    create_attribute_redactor,
+    create_redacted_span,
+    normalize_rest_api_span_name,
+)
+from .structured_error import (
+    ParsedError,
+    StructuredError,
+    create_structured_error,
+    get_structured_error_attributes,
+    parse_error,
+    record_structured_error,
+    structured_error_to_json,
+)
 from .subscribers import EventSubscriber as EventSubscriberBase
 from .subscribers import (
     PostHogSubscriber,
@@ -96,6 +177,38 @@ from .tracer_provider import (
 )
 from .track import set_event, track
 from .validation import ValidationConfig, Validator, get_validator, set_validator
+from .webhook import (
+    CallbackContext,
+    InMemoryTraceContextStore,
+    ParkingLot,
+    StoredTraceContext,
+    TraceContextStore,
+    create_correlation_key,
+    create_parking_lot,
+    to_span_context,
+)
+from .workflow import (
+    Saga,
+    SagaFailed,
+    SagaStep,
+    StepResult,
+    Workflow,
+    WorkflowStatus,
+    WorkflowStep,
+    trace_workflow,
+)
+from .workflow_distributed import (
+    DistributedStepContext,
+    DistributedWorkflowContext,
+    WorkflowBaggage,
+    WorkflowBaggageValues,
+    create_workflow_headers,
+    generate_workflow_id,
+    get_workflow_progress,
+    is_in_distributed_workflow,
+    trace_distributed_step,
+    trace_distributed_workflow,
+)
 
 # Config is optional (requires pydantic)
 try:
@@ -114,6 +227,18 @@ __all__ = [
     "trace_func",
     "with_new_context",
     "with_baggage",
+    # GenAI Helpers
+    "GEN_AI_COST_ATTRIBUTE",
+    "MODEL_PRICING",
+    "ModelPricing",
+    "TokenUsage",
+    "estimate_llm_cost",
+    "record_llm_cost",
+    "record_prompt_sent",
+    "record_response_received",
+    "record_gen_ai_retry",
+    "record_tool_call",
+    "record_stream_first_token",
     # Convenience Helpers
     "set_attributes",
     "set_attribute",
@@ -124,6 +249,14 @@ __all__ = [
     "get_baggage",
     "get_all_baggage",
     "set_baggage_value",
+    # Structured Errors
+    "StructuredError",
+    "ParsedError",
+    "create_structured_error",
+    "structured_error_to_json",
+    "get_structured_error_attributes",
+    "record_structured_error",
+    "parse_error",
     # Baggage
     "BaggageSpanProcessor",
     # Production hardening
@@ -181,6 +314,13 @@ __all__ = [
     # Processors (for custom configurations)
     "SimpleSpanProcessor",
     "BatchSpanProcessor",
+    "SpanNameNormalizingProcessor",
+    "FilteringSpanProcessor",
+    "AttributeRedactingProcessor",
+    "AttributeRedactorConfig",
+    "normalize_rest_api_span_name",
+    "create_attribute_redactor",
+    "create_redacted_span",
     # Operation Context
     "get_operation_context",
     "run_in_operation_context",
@@ -197,6 +337,83 @@ __all__ = [
     "trace_db",
     "trace_http",
     "trace_messaging",
+    # Messaging Decorators
+    "trace_consumer",
+    "trace_producer",
+    "trace_batch_consumer",
+    "inject_trace_headers",
+    "extract_trace_context",
+    # Messaging Context Classes
+    "ProducerContext",
+    "ConsumerContext",
+    "DLQOptions",
+    "DLQReplayOptions",
+    "OrderingConfig",
+    "OutOfOrderInfo",
+    "ConsumerGroupState",
+    "ConsumerGroupTrackingConfig",
+    "PartitionAssignment",
+    "PartitionLag",
+    "RebalanceEvent",
+    "clear_ordering_state",
+    # Messaging Helpers (DLQ/Retry/Lag)
+    "record_dlq",
+    "record_retry",
+    "record_consumer_lag",
+    # Messaging Adapters
+    "MessagingAdapter",
+    "ProducerAdapter",
+    "ConsumerAdapter",
+    "nats_adapter",
+    "temporal_adapter",
+    "cloudflare_queues_adapter",
+    "sqs_adapter",
+    "redis_streams_adapter",
+    # Context Extractors
+    "datadog_context_extractor",
+    "b3_context_extractor",
+    "xray_context_extractor",
+    "jaeger_context_extractor",
+    "create_multi_format_extractor",
+    "default_multi_format_extractor",
+    # Business Baggage
+    "BusinessBaggage",
+    "BusinessBaggageConfig",
+    "SafeBaggageSchema",
+    "BaggageFieldDefinition",
+    "configure_business_baggage",
+    "define_business_baggage",
+    "get_business_baggage",
+    "create_safe_baggage_schema",
+    # Workflow/Saga Tracing (Local)
+    "Workflow",
+    "WorkflowStatus",
+    "WorkflowStep",
+    "StepResult",
+    "Saga",
+    "SagaStep",
+    "SagaFailed",
+    "trace_workflow",
+    # Distributed Workflow Tracing
+    "trace_distributed_workflow",
+    "trace_distributed_step",
+    "DistributedWorkflowContext",
+    "DistributedStepContext",
+    "WorkflowBaggage",
+    "WorkflowBaggageValues",
+    "generate_workflow_id",
+    "is_in_distributed_workflow",
+    "get_workflow_progress",
+    "create_workflow_headers",
+    # Webhook/Parking Lot Pattern
+    "ParkingLot",
+    "InMemoryTraceContextStore",
+    "TraceContextStore",
+    "StoredTraceContext",
+    "CallbackContext",
+    "create_parking_lot",
+    "create_correlation_key",
+    "to_span_context",
     # Isolated Tracer Provider
     "set_autotel_tracer_provider",
     "get_autotel_tracer_provider",

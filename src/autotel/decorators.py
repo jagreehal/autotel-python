@@ -3,7 +3,7 @@
 import functools
 import inspect
 from collections.abc import Callable
-from typing import ParamSpec, TypeVar, overload
+from typing import Any, ParamSpec, TypeVar, overload
 
 from opentelemetry import trace as otel_trace
 from opentelemetry.trace import StatusCode
@@ -13,6 +13,27 @@ from .operation_context import run_in_operation_context
 
 P = ParamSpec("P")
 R = TypeVar("R")
+
+# Parameter names that indicate context injection
+CTX_PARAM_NAMES = ("ctx", "context", "tracecontext")
+
+
+def _rewrite_signature_without_ctx(
+    wrapper: Callable[..., Any], original_func: Callable[..., Any]
+) -> None:
+    """Remove the first (injected ctx) param from wrapper's signature.
+
+    Frameworks like FastAPI inspect function signatures for dependency injection.
+    Without this fix, the ctx parameter would appear as a required query parameter.
+
+    Only removes the FIRST parameter (the injected TraceContext), preserving any
+    other parameters that may happen to be named 'context' etc.
+    """
+    original_sig = inspect.signature(original_func)
+    params = list(original_sig.parameters.values())
+    # Only remove the first parameter (the injected ctx)
+    new_params = params[1:] if params else []
+    wrapper.__signature__ = original_sig.replace(parameters=new_params)  # type: ignore[attr-defined]
 
 
 @overload
@@ -56,7 +77,7 @@ def trace(
         # Detect if function expects ctx parameter
         sig = inspect.signature(fn)
         params = list(sig.parameters.keys())
-        needs_ctx = len(params) > 0 and params[0] in ("ctx", "context", "tracecontext")
+        needs_ctx = len(params) > 0 and params[0] in CTX_PARAM_NAMES
 
         # Infer span name
         span_name = name or fn.__name__
@@ -83,6 +104,8 @@ def trace(
                         span.set_status(StatusCode.ERROR, str(e))
                         raise
 
+            if needs_ctx:
+                _rewrite_signature_without_ctx(async_wrapper, fn)
             return async_wrapper  # type: ignore[return-value]
         else:
 
@@ -106,6 +129,8 @@ def trace(
                         span.set_status(StatusCode.ERROR, str(e))
                         raise
 
+            if needs_ctx:
+                _rewrite_signature_without_ctx(sync_wrapper, fn)
             return sync_wrapper
 
     if func is None:

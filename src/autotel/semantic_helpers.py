@@ -13,6 +13,7 @@ from opentelemetry import trace as otel_trace
 from opentelemetry.trace import StatusCode
 
 from .context import TraceContext
+from .decorators import CTX_PARAM_NAMES, _rewrite_signature_without_ctx
 from .operation_context import run_in_operation_context
 
 P = ParamSpec("P")
@@ -88,7 +89,7 @@ def trace_llm(
         # Detect if function expects ctx parameter
         sig = inspect.signature(func)
         params = list(sig.parameters.keys())
-        needs_ctx = len(params) > 0 and params[0] in ("ctx", "context", "tracecontext")
+        needs_ctx = len(params) > 0 and params[0] in CTX_PARAM_NAMES
 
         # Infer span name
         span_name = name or func.__name__
@@ -128,6 +129,8 @@ def trace_llm(
                         span.set_status(StatusCode.ERROR, str(e))
                         raise
 
+            if needs_ctx:
+                _rewrite_signature_without_ctx(async_wrapper, func)
             return async_wrapper  # type: ignore[return-value]
         else:
 
@@ -164,6 +167,8 @@ def trace_llm(
                         span.set_status(StatusCode.ERROR, str(e))
                         raise
 
+            if needs_ctx:
+                _rewrite_signature_without_ctx(sync_wrapper, func)
             return sync_wrapper
 
     return decorator
@@ -243,7 +248,7 @@ def trace_db(
         # Detect if function expects ctx parameter
         sig = inspect.signature(func)
         params = list(sig.parameters.keys())
-        needs_ctx = len(params) > 0 and params[0] in ("ctx", "context", "tracecontext")
+        needs_ctx = len(params) > 0 and params[0] in CTX_PARAM_NAMES
 
         # Infer span name
         span_name = name or func.__name__
@@ -286,6 +291,8 @@ def trace_db(
                         span.set_status(StatusCode.ERROR, str(e))
                         raise
 
+            if needs_ctx:
+                _rewrite_signature_without_ctx(async_wrapper, func)
             return async_wrapper  # type: ignore[return-value]
         else:
 
@@ -325,6 +332,8 @@ def trace_db(
                         span.set_status(StatusCode.ERROR, str(e))
                         raise
 
+            if needs_ctx:
+                _rewrite_signature_without_ctx(sync_wrapper, func)
             return sync_wrapper
 
     return decorator
@@ -394,7 +403,7 @@ def trace_http(
         # Detect if function expects ctx parameter
         sig = inspect.signature(func)
         params = list(sig.parameters.keys())
-        needs_ctx = len(params) > 0 and params[0] in ("ctx", "context", "tracecontext")
+        needs_ctx = len(params) > 0 and params[0] in CTX_PARAM_NAMES
 
         # Infer span name
         span_name = name or func.__name__
@@ -434,6 +443,8 @@ def trace_http(
                         span.set_status(StatusCode.ERROR, str(e))
                         raise
 
+            if needs_ctx:
+                _rewrite_signature_without_ctx(async_wrapper, func)
             return async_wrapper  # type: ignore[return-value]
         else:
 
@@ -470,6 +481,8 @@ def trace_http(
                         span.set_status(StatusCode.ERROR, str(e))
                         raise
 
+            if needs_ctx:
+                _rewrite_signature_without_ctx(sync_wrapper, func)
             return sync_wrapper
 
     return decorator
@@ -558,7 +571,7 @@ def trace_messaging(
         # Detect if function expects ctx parameter
         sig = inspect.signature(func)
         params = list(sig.parameters.keys())
-        needs_ctx = len(params) > 0 and params[0] in ("ctx", "context", "tracecontext")
+        needs_ctx = len(params) > 0 and params[0] in CTX_PARAM_NAMES
 
         # Infer span name
         span_name = name or func.__name__
@@ -599,6 +612,8 @@ def trace_messaging(
                         span.set_status(StatusCode.ERROR, str(e))
                         raise
 
+            if needs_ctx:
+                _rewrite_signature_without_ctx(async_wrapper, func)
             return async_wrapper  # type: ignore[return-value]
         else:
 
@@ -636,6 +651,8 @@ def trace_messaging(
                         span.set_status(StatusCode.ERROR, str(e))
                         raise
 
+            if needs_ctx:
+                _rewrite_signature_without_ctx(sync_wrapper, func)
             return sync_wrapper
 
     return decorator

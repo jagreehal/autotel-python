@@ -46,6 +46,13 @@ async def create_user(ctx, data):
 - ✅ OpenLLMetry integration: auto-instrument LLM SDKs
 - ✅ Validation utilities: event name and attribute validation
 
+### Event-Driven Observability
+- ✅ Webhook/Parking Lot pattern: "park" trace context for async callbacks
+- ✅ Distributed workflow tracing: cross-service workflow correlation via baggage
+- ✅ Messaging adapters: NATS, Temporal, Cloudflare Queues, SQS, Redis Streams
+- ✅ Multi-vendor context extractors: Datadog, B3, X-Ray, Jaeger headers
+- ✅ Enhanced messaging context: DLQ helpers, retry logic, ordering validation
+
 ## Contents
 
 ```{toctree}

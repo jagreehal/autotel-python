@@ -9,6 +9,9 @@ class OtelEnvVars(TypedDict, total=False):
 
     OTEL_SERVICE_NAME: str
     OTEL_EXPORTER_OTLP_ENDPOINT: str
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: str
+    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: str
+    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: str
     OTEL_EXPORTER_OTLP_HEADERS: str
     OTEL_RESOURCE_ATTRIBUTES: str
     OTEL_EXPORTER_OTLP_PROTOCOL: Literal["http/protobuf", "grpc"]
@@ -19,6 +22,9 @@ class EnvConfig(TypedDict, total=False):
 
     service: str
     endpoint: str
+    traces_endpoint: str
+    metrics_endpoint: str
+    logs_endpoint: str
     protocol: Literal["http", "grpc"]
     headers: dict[str, str]
     resource_attributes: dict[str, str]
@@ -38,6 +44,15 @@ def resolve_otel_env() -> OtelEnvVars:
 
     if endpoint := os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"):
         env_vars["OTEL_EXPORTER_OTLP_ENDPOINT"] = endpoint
+
+    if traces_endpoint := os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"):
+        env_vars["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = traces_endpoint
+
+    if metrics_endpoint := os.getenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"):
+        env_vars["OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"] = metrics_endpoint
+
+    if logs_endpoint := os.getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"):
+        env_vars["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"] = logs_endpoint
 
     if headers := os.getenv("OTEL_EXPORTER_OTLP_HEADERS"):
         env_vars["OTEL_EXPORTER_OTLP_HEADERS"] = headers
@@ -146,6 +161,15 @@ def env_to_config(env: OtelEnvVars) -> EnvConfig:
 
     if "OTEL_EXPORTER_OTLP_ENDPOINT" in env:
         config["endpoint"] = env["OTEL_EXPORTER_OTLP_ENDPOINT"]
+
+    if "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT" in env:
+        config["traces_endpoint"] = env["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"]
+
+    if "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT" in env:
+        config["metrics_endpoint"] = env["OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"]
+
+    if "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT" in env:
+        config["logs_endpoint"] = env["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"]
 
     if "OTEL_EXPORTER_OTLP_PROTOCOL" in env:
         protocol = env["OTEL_EXPORTER_OTLP_PROTOCOL"]

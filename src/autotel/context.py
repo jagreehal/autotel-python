@@ -4,18 +4,12 @@ from collections.abc import Mapping, Sequence
 
 from opentelemetry import context, trace
 from opentelemetry.baggage import propagation
+from opentelemetry.propagate import inject
 from opentelemetry.trace import Link, Span, SpanContext, StatusCode
 
 # OpenTelemetry attribute value types - primitives and homogeneous sequences
 AttributeValue = (
-    str
-    | int
-    | float
-    | bool
-    | Sequence[str]
-    | Sequence[int]
-    | Sequence[float]
-    | Sequence[bool]
+    str | int | float | bool | Sequence[str] | Sequence[int] | Sequence[float] | Sequence[bool]
 )
 
 
@@ -223,3 +217,33 @@ class TraceContext:
             return {}
         # Convert baggage Mapping to dict, converting values to strings
         return {k: str(v) for k, v in baggage.items()}
+
+    def inject_headers(self, headers: dict[str, str] | None = None) -> dict[str, str]:
+        """
+        Inject trace context into headers for propagation.
+
+        Use this when producing messages or making HTTP calls to propagate
+        the current trace context to downstream services.
+
+        Args:
+            headers: Optional existing headers dict to add to. If None, creates new dict.
+
+        Returns:
+            Headers dict with traceparent/tracestate added.
+
+        Example:
+            >>> @trace_producer(system="kafka", destination="orders")
+            ... async def send_order(ctx, order: Order):
+            ...     headers = ctx.inject_headers()
+            ...     await producer.send("orders", value=order.dict(), headers=headers)
+
+            >>> # Add to existing headers
+            >>> @trace_producer(system="http", destination="api")
+            ... async def call_api(ctx, data: dict):
+            ...     headers = ctx.inject_headers({"Content-Type": "application/json"})
+            ...     async with httpx.AsyncClient() as client:
+            ...         return await client.post(url, json=data, headers=headers)
+        """
+        result = dict(headers) if headers else {}
+        inject(result)
+        return result

@@ -3,7 +3,7 @@
 from typing import Any
 
 import pytest
-from opentelemetry.trace import StatusCode
+from opentelemetry.trace import Link, SpanContext, StatusCode, TraceFlags
 
 from autotel import init, span
 from autotel.exporters import InMemorySpanExporter
@@ -172,3 +172,46 @@ def test_trace_context_mixed_attributes(exporter: Any) -> None:
     assert tuple(attrs.get("item.ids")) == ("id_1", "id_2", "id_3")
     assert attrs.get("success.rate") == 0.95
     assert tuple(attrs.get("error.codes")) == (404, 500, 503)
+
+
+def test_trace_context_add_link(exporter: Any) -> None:
+    """Test adding a single link to another span."""
+    link_ctx = SpanContext(
+        trace_id=0x1,
+        span_id=0x2,
+        is_remote=True,
+        trace_flags=TraceFlags.SAMPLED,
+    )
+    with span("batch.processor") as ctx:
+        ctx.add_link(link_ctx, {"link.type": "batch"})
+
+    spans = exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert len(spans[0].links) == 1
+    assert spans[0].links[0].context.trace_id == 0x1
+    assert spans[0].links[0].context.span_id == 0x2
+    assert spans[0].links[0].attributes == {"link.type": "batch"}
+
+
+def test_trace_context_add_links(exporter: Any) -> None:
+    """Test adding multiple links to other spans."""
+    link1 = Link(
+        context=SpanContext(
+            trace_id=0xA, span_id=0xB, is_remote=True, trace_flags=TraceFlags.SAMPLED
+        ),
+        attributes={"link.type": "producer"},
+    )
+    link2 = Link(
+        context=SpanContext(
+            trace_id=0xC, span_id=0xD, is_remote=True, trace_flags=TraceFlags.SAMPLED
+        ),
+        attributes={"link.type": "message"},
+    )
+    with span("consumer.span") as ctx:
+        ctx.add_links([link1, link2])
+
+    spans = exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert len(spans[0].links) == 2
+    assert spans[0].links[0].context.trace_id == 0xA
+    assert spans[0].links[1].context.trace_id == 0xC
