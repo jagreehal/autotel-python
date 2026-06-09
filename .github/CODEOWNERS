@@ -1,0 +1,15 @@
+# CODEOWNERS — release-critical paths
+#
+# Combined with branch protection's "Require review from Code Owners", changes to
+# these paths need sign-off from the owner below.
+#
+# SPLIT AUTHORITY: the owner is @jaggitadmin — a rarely-used admin identity, kept
+# separate from the day-to-day @jagreehal account and not authenticated on developer
+# workstations, so a compromised day-to-day session cannot approve its own changes
+# to the release pipeline. Requires @jaggitadmin to be a collaborator with write
+# access and "Require review from Code Owners" enabled on the branch ruleset.
+
+/.github/workflows/   @jaggitadmin
+/.github/CODEOWNERS   @jaggitadmin
+/pyproject.toml       @jaggitadmin
+/scripts/             @jaggitadmin
