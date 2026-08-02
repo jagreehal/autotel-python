@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-02
+
+> Minimum supported dependency versions are raised, which is a compatibility break
+> for downstreams, not a patch-level refresh.
+
+### Changed
+- **BREAKING: minimum supported dependency versions raised.** These are floors, not just
+  lockfile pins — installs that previously resolved will now fail to. Runtime dependencies:
+  `opentelemetry-{api,sdk,exporter-otlp}` >=1.38 → **>=1.44**, `pydantic` >=2.12 → **>=2.13.4**,
+  `typing-extensions` >=4.12 → **>=4.16**. Optional extras: `opentelemetry-instrumentation-{fastapi,django,flask}`
+  >=0.47b0 → **>=0.65b0**, `pydantic-ai` >=1.19 → **>=2.22** (a major version of that project),
+  `structlog` >=25.5 → **>=26.1**, `ollama` >=0.6.0 → **>=0.6.2**, `httpx` >=0.28.0 → **>=0.28.1**.
+  Consumers pinned below any of these must upgrade before taking this release.
+  Every floor is set to the latest release published at the time of the bump.
+- **Dev toolchain** — `pytest` 9.1.1, `pytest-asyncio` 1.4.0, `pytest-cov` 7.1.0, `ruff` 0.16.1,
+  `mypy` 2.3.0, `fastapi` 0.141.1, `build` 1.5.0, `twine` 7.0.0. Dev-only; no consumer impact.
+- **mypy hardening** — `warn_unused_ignores` is now `true`. The previous `false` existed to keep
+  version-dependent ignores valid across the 1.38–1.42 SDK typing change; raising the
+  `opentelemetry-sdk` floor to 1.44 puts the whole supported range past that change, so the
+  suppression is no longer needed. Removed two now-dead `# type: ignore[no-untyped-call]`
+  comments in `shutdown` / `init`, and gave `mcp._patch_mcp_class` an explicit `target: Any`
+  boundary for the dynamically-patched third-party class instead of two new inline ignores.
+  Note this coupling: reverting the SDK floor to <1.42 requires reverting `warn_unused_ignores` too.
+
+### Internal
+- CI now installs `.[dev,all]`, so the optional extras' version floors are proven to resolve on
+  every supported Python version (3.10–3.13) rather than going unexercised.
+- CI lints the whole tree (`ruff check .`) instead of just `src tests`; `examples/` and `scripts/`
+  are exempted from `ARG001` for the same reason `tests/` already is — decorators supply
+  `ctx`/payload arguments positionally, so demo signatures keep parameters their bodies ignore.
+
 ## [0.4.1] - 2026-05-30
 
 ### Documentation

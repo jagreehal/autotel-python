@@ -192,10 +192,12 @@ def _patch_mcp_class(
         if cls is None or not inspect.isclass(cls):
             continue
 
-        if getattr(cls, "__autotel_mcp_patched__", False):
+        target: Any = cls
+
+        if getattr(target, "__autotel_mcp_patched__", False):
             continue
 
-        original_init = cls.__init__
+        original_init = target.__init__
 
         def patched_init(
             self: Any,
@@ -207,8 +209,8 @@ def _patch_mcp_class(
             instrumenter(self)
 
         patched_init.__signature__ = getattr(original_init, "__signature__", None)  # type: ignore[attr-defined]
-        cls.__init__ = patched_init
-        cls.__autotel_mcp_patched__ = True
+        target.__init__ = patched_init
+        target.__autotel_mcp_patched__ = True
 
 
 def _merge_config(config: McpInstrumentationConfig | None) -> McpInstrumentationConfig:

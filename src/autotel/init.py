@@ -384,7 +384,7 @@ def init(
             current_logger_provider = otel_logs.get_logger_provider()
             if isinstance(current_logger_provider, LoggerProvider):
                 with suppress(Exception):
-                    current_logger_provider.shutdown()  # type: ignore[no-untyped-call]
+                    current_logger_provider.shutdown()
         except Exception:
             pass  # Ignore errors during shutdown
 

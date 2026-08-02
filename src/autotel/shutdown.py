@@ -92,7 +92,7 @@ async def shutdown(timeout: float = 5.0) -> None:
     if _logger_provider:
         try:
             _logger_provider.force_flush(timeout_millis=int(timeout * 1000))
-            _logger_provider.shutdown()  # type: ignore[no-untyped-call]
+            _logger_provider.shutdown()
         except Exception as e:
             logger.error(f"Error shutting down logger provider: {e}", exc_info=True)
 

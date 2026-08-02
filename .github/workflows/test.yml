@@ -26,10 +26,13 @@ jobs:
         run: pip install uv
 
       - name: Install dependencies
-        run: uv pip install --system -e ".[dev]"
+        # [all] as well as [dev]: the optional extras carry their own version
+        # floors, and installing them here is what proves those floors actually
+        # resolve on every supported Python.
+        run: uv pip install --system -e ".[dev,all]"
 
       - name: Run linting
-        run: python -m ruff check src tests
+        run: python -m ruff check .
 
       - name: Run type checking
         run: mypy src
