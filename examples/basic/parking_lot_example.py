@@ -65,7 +65,7 @@ async def handle_payment_webhook(ctx: CallbackContext, event: dict) -> None:
 
 async def main() -> None:
     # Simulate: service initiates payment
-    key = await initiate_payment("ord-123", 9999)
+    await initiate_payment("ord-123", 9999)
     # Simulate: later, webhook arrives
     await handle_payment_webhook({"order_id": "ord-123"})
     # Miss: no parked context

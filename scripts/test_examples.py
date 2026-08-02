@@ -335,12 +335,14 @@ def test_distributed_workflow_example() -> None:
         span_processor=SimpleSpanProcessor(exporter),
     )
 
+    from opentelemetry import context
+
     from autotel.workflow_distributed import (
+        WorkflowBaggage,
+        WorkflowBaggageValues,
         trace_distributed_step,
         trace_distributed_workflow,
     )
-    from opentelemetry import context
-    from autotel.workflow_distributed import WorkflowBaggage, WorkflowBaggageValues
 
     @trace_distributed_workflow(
         name="DemoWorkflow",

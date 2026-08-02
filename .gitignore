@@ -49,3 +49,6 @@ Thumbs.db
 *.log
 .env
 .env.local
+
+# Tooling artifacts
+.executable-stories/

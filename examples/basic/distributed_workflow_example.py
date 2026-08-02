@@ -7,18 +7,19 @@ Workflow starts in one "service" (order), propagates via baggage to another
 import asyncio
 from typing import Any
 
+from opentelemetry import context
+
 from autotel import (
     ConsoleSpanExporter,
     SimpleSpanProcessor,
     init,
 )
 from autotel.workflow_distributed import (
+    WorkflowBaggage,
+    WorkflowBaggageValues,
     trace_distributed_step,
     trace_distributed_workflow,
 )
-from opentelemetry import context
-
-from autotel.workflow_distributed import WorkflowBaggage, WorkflowBaggageValues
 
 init(
     service="distributed-workflow-example",
