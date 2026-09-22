@@ -42,6 +42,36 @@ def set_logger_provider_for_shutdown(provider: LoggerProvider) -> None:
     _logger_provider = provider
 
 
+def flush(timeout: float = 5.0) -> None:
+    """
+    Force-export everything buffered, keeping autotel running.
+
+    Call it at the end of a Lambda handler so batched spans and logs export
+    before the runtime freezes the container. Unlike ``shutdown()``, it leaves
+    the providers running for the next invocation on a warm container.
+
+    Args:
+        timeout: Maximum time to wait per provider, in seconds.
+    """
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+
+    timeout_millis = int(timeout * 1000)
+    provider = trace.get_tracer_provider()
+    providers = [
+        provider if isinstance(provider, TracerProvider) else None,
+        _meter_provider,
+        _logger_provider,
+    ]
+    for target in providers:
+        if target is None:
+            continue
+        try:
+            target.force_flush(timeout_millis=timeout_millis)
+        except Exception as e:
+            logger.error(f"Error flushing {type(target).__name__}: {e}", exc_info=True)
+
+
 async def shutdown(timeout: float = 5.0) -> None:
     """
     Gracefully shutdown autotel.

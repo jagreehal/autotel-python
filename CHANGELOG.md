@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Log export over OTLP.** With `logs=True`, autotel exports stdlib logging records through the
+  OTLP logs pipeline, linked to the active span. A structlog or loguru logger passed as `logger=`
+  joins the same pipeline, including structlog loggers bound or cached before `init()`.
+  Re-initializing replaces only autotel's handlers and leaves application handlers in place.
+- **`flush()`** exports buffered spans, metrics and logs and keeps autotel running, for serverless
+  handlers on warm containers.
+- **`@trace("span.name")`** accepts the span name as the first argument.
+- **`pydantic_ai=` mapping** passes settings to `InstrumentationSettings`,
+  e.g. `{"include_content": False}`.
+- **`datadog_preset()`** targets Datadog's OTLP intake and adds `version`, `enable_logs`,
+  `llmobs` (routes `gen_ai.*` spans to Agent Observability) and local Agent mode
+  (`use_agent`, `agent_host`, `agent_port`). A preset's `logs` setting applies when `init()`
+  omits `logs`.
+
+### Changed
+- Dependency floors: `pydantic` >=2.13.5, `pydantic-ai` extra >=2.47.0.
+
 ## [0.5.0] - 2026-08-02
 
 > Minimum supported dependency versions are raised, which is a compatibility break
