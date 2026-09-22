@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-22
+
 ### Added
 - **Log export over OTLP.** With `logs=True`, autotel exports stdlib logging records through the
   OTLP logs pipeline, linked to the active span. A structlog or loguru logger passed as `logger=`
