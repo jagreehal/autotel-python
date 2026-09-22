@@ -1,6 +1,7 @@
 """Initialize autotel with OpenTelemetry SDK."""
 
 from collections.abc import Mapping
+from contextlib import suppress
 from dataclasses import dataclass
 from importlib import import_module
 from typing import Any, Literal
@@ -129,8 +130,12 @@ def _format_endpoint_url(
     return f"{endpoint.rstrip('/')}{suffix}"
 
 
-def _instrument_pydantic_ai() -> None:
-    """Enable Pydantic AI's built-in OpenTelemetry hooks when installed."""
+def _instrument_pydantic_ai(settings: bool | Mapping[str, Any] = True) -> None:
+    """Enable Pydantic AI's built-in OpenTelemetry hooks when installed.
+
+    Must run after the tracer provider is set: Pydantic AI resolves the global
+    provider when it builds its InstrumentationSettings.
+    """
     try:
         pydantic_ai_module = import_module("pydantic_ai")
     except ImportError as exc:
@@ -140,7 +145,12 @@ def _instrument_pydantic_ai() -> None:
         ) from exc
 
     Agent = pydantic_ai_module.Agent
-    Agent.instrument_all()
+    if isinstance(settings, Mapping):
+        from pydantic_ai.models.instrumented import InstrumentationSettings
+
+        Agent.instrument_all(InstrumentationSettings(**settings))
+    else:
+        Agent.instrument_all()
 
 
 def _wrap_span_processor(
@@ -207,7 +217,7 @@ def init(
     span_name_normalizer: SpanNameNormalizer | SpanNameNormalizerPreset | None = None,
     attribute_redactor: AttributeRedactorConfig | AttributeRedactorPreset | AttributeRedactor | None = None,
     openllmetry: dict[str, Any] | None = None,  # OpenLLMetry configuration
-    pydantic_ai: bool = False,  # Instrument all Pydantic AI agents
+    pydantic_ai: bool | Mapping[str, Any] = False,  # Instrument all Pydantic AI agents
     baggage: bool | str | None = None,  # Auto-copy baggage to span attributes
 ) -> None:
     """
@@ -271,6 +281,9 @@ def init(
         attribute_redactor: Redaction preset/config/callable for span attributes.
         openllmetry: OpenLLMetry configuration
         pydantic_ai: Instrument all Pydantic AI agents via Agent.instrument_all().
+            True uses Pydantic AI's defaults; a mapping is passed to
+            InstrumentationSettings, e.g. {"include_content": False} to keep
+            prompts and completions out of the exported spans.
         baggage: Automatically copy baggage entries to span attributes.
             - True: adds baggage with 'baggage.' prefix (e.g. baggage.tenant.id)
             - str: uses custom prefix (e.g. 'ctx' → ctx.tenant.id, '' → tenant.id)
@@ -331,6 +344,8 @@ def init(
         protocol = preset.get("protocol", protocol)
         insecure = preset.get("insecure", insecure)
         preset_headers = preset.get("headers", {})
+        if isinstance(headers, str):
+            headers = parse_otlp_headers(headers)
         headers = {**preset_headers, **headers} if headers else preset_headers
         preset_resource_attrs = preset.get("resource_attributes", {})
         resource_attributes = (
@@ -338,6 +353,8 @@ def init(
             if resource_attributes
             else preset_resource_attrs
         )
+        if logs is None:
+            logs = preset.get("logs")
 
     # Set up validation if provided
     if validation:
@@ -358,8 +375,6 @@ def init(
     # Allow re-initialization for testing - shutdown existing provider if needed
     if _INITIALIZED:
         # Try to shutdown existing provider to allow re-initialization
-        from contextlib import suppress
-
         try:
             existing_provider = trace.get_tracer_provider()
             if isinstance(existing_provider, TracerProvider):
@@ -567,7 +582,7 @@ def init(
 
     logger_provider: LoggerProvider | None = None
     resolved_log_processors = list(log_record_processors or [])
-    if logs is True:
+    if logs is True or logs == "auto":
         log_exporter_endpoint = _format_endpoint_url(
             logs_endpoint or resolved_endpoint,
             "logs",
@@ -595,10 +610,25 @@ def init(
         logger_provider = LoggerProvider(resource=resource)
         for processor in resolved_log_processors:
             logger_provider.add_log_record_processor(processor)
-        otel_logs.set_logger_provider(logger_provider)
+        # OpenTelemetry won't replace a logger provider that is already set, so
+        # a second init() swaps the global on the module get_logger_provider()
+        # reads, as it does for the tracer provider above.
+        if isinstance(otel_logs.get_logger_provider(), LoggerProvider):
+            from opentelemetry._logs import _internal as otel_logs_internal
+
+            with suppress(Exception):
+                otel_logs_internal._LOGGER_PROVIDER = logger_provider
+        else:
+            otel_logs.set_logger_provider(logger_provider)
         from .shutdown import set_logger_provider_for_shutdown
 
         set_logger_provider_for_shutdown(logger_provider)
+
+        # Export records from stdlib logging (and a passed structlog/loguru
+        # logger) through the same pipeline.
+        from .logging import forward_logging_to_otlp
+
+        forward_logging_to_otlp(logger_provider, logger)
 
     # Initialize event tracking if subscribers provided
     if subscribers:
@@ -654,8 +684,9 @@ def init(
             enabled=openllmetry.get("enabled", True),
         )
 
-    if pydantic_ai:
-        _instrument_pydantic_ai()
+    # `pydantic_ai={}` means default settings, so test for a mapping as well.
+    if pydantic_ai or isinstance(pydantic_ai, Mapping):
+        _instrument_pydantic_ai(pydantic_ai)
 
     # Enable built-in instrumentation
     if instrumentation and "mcp" in instrumentation:

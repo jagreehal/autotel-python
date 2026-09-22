@@ -46,14 +46,14 @@ def trace(
 
 @overload
 def trace(
-    func: None = None,
+    func: str | None = None,
     *,
     name: str | None = None,
 ) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
 
 
 def trace(
-    func: Callable[P, R] | None = None,
+    func: Callable[P, R] | str | None = None,
     *,
     name: str | None = None,
 ) -> Callable[P, R] | Callable[[Callable[P, R]], Callable[P, R]]:
@@ -67,11 +67,19 @@ def trace(
         >>> async def get_user(user_id: str):
         ...     return await db.users.find(user_id)
 
+        >>> @trace('user.get')  # span name as the first argument
+        >>> async def get_user(user_id: str):
+        ...     return await db.users.find(user_id)
+
         >>> @trace
         >>> async def create_user(ctx, data: dict[str, Any]):
         ...     ctx.set_attribute('user.email', data['email'])
         ...     return await db.users.create(data)
     """
+
+    # `@trace('span.name')`: the span name given positionally.
+    if isinstance(func, str):
+        name, func = func, None
 
     def decorator(fn: Callable[P, R]) -> Callable[P, R]:
         # Detect if function expects ctx parameter

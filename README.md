@@ -333,6 +333,10 @@ async def create_user(ctx, data: dict):
 @trace(name="custom.operation")
 def process_data(data):
     return transform(data)
+
+@trace("custom.operation")  # same, with the name as the first argument
+def process_batch(batch):
+    return [transform(item) for item in batch]
 ```
 
 ### `span()` context manager
@@ -1008,6 +1012,16 @@ What you get automatically:
 - Zero configuration: just pass your logger to `init()`
 - Supports standard logging, structlog, and loguru
 
+### Exporting log records over OTLP
+
+Add `logs=True` and autotel exports your log records through the OTLP logs pipeline, each one linked to the active span:
+
+```python
+init(service='user-service', logger=logger, logs=True)
+```
+
+Standard logging records go through a handler on the logger you pass (or the root logger). autotel bridges a structlog or loguru logger into the same pipeline, including structlog loggers you bound or cached before `init()`. Calling `init()` again replaces only the handlers autotel installed and leaves your own in place.
+
 ## Framework Integrations
 
 ### FastAPI
@@ -1128,7 +1142,29 @@ Useful migration switches:
 - `span_name_normalizer="rest-api"` reduces high-cardinality span names such as `/users/123`.
 - `attribute_redactor="default"` masks secrets, emails, phone numbers, SSNs, and card numbers before export.
 - `resource=existing_resource` lets raw OTel users reuse an existing `opentelemetry.sdk.resources.Resource`.
-- `pydantic_ai=True` replaces manual `Agent.instrument_all()` wiring.
+- `pydantic_ai=True` replaces manual `Agent.instrument_all()` wiring. Pass a mapping to set `InstrumentationSettings`, e.g. `pydantic_ai={"include_content": False}` keeps prompts and completions out of exported spans.
+
+### Datadog
+
+`datadog_preset()` sends traces (and logs, with `enable_logs=True`) to Datadog's OTLP intake. It also sets `dd-otlp-source: llmobs`, so `gen_ai.*` spans show up in Agent Observability as well as APM.
+
+```python
+from autotel import init
+from autotel.presets import datadog_preset
+
+init(
+    service="checkout-api",
+    preset=datadog_preset(
+        api_key="dd_api_key",
+        site="datadoghq.eu",
+        environment="production",
+        version="1.8.0",
+        enable_logs=True,
+    ),
+)
+```
+
+Running a local Datadog Agent (7.35+ with OTLP enabled)? Use `datadog_preset(use_agent=True)`. The Agent handles auth, so you don't need an API key.
 
 ### Adaptive Sampling
 
@@ -1283,6 +1319,17 @@ if is_serverless():
 
 # Auto-register flush on exit (only in serverless environments)
 auto_flush_if_serverless(lambda: shutdown_sync(timeout=5.0))
+```
+
+To export buffered spans and logs at the end of each invocation and keep autotel running for the next one on a warm container, call `flush()`:
+
+```python
+from autotel import flush
+
+def handler(event, context):
+    result = process(event)
+    flush(timeout=5.0)
+    return result
 ```
 
 Supported environments:

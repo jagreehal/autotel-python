@@ -57,7 +57,7 @@ you use it; defaults stay sensible and quiet.
 | Parameter | Default | Purpose |
 |---|---|---|
 | `metrics` | — | `True` creates an OTLP metric reader; or pass a config `dict`. |
-| `logs` | — | `True` creates an OTLP log processor; `"auto"` for detection. |
+| `logs` | — | `True` creates an OTLP log processor and exports records from stdlib logging and the `logger` you pass (structlog and loguru included); `"auto"` for detection. |
 
 ### Local development
 
@@ -71,7 +71,7 @@ you use it; defaults stay sensible and quiet.
 | Parameter | Default | Purpose |
 |---|---|---|
 | `instrumentation` | — | List of integrations to auto-instrument (e.g. FastAPI, Django, Flask). |
-| `pydantic_ai` | `False` | Auto-instrument Pydantic AI agents. |
+| `pydantic_ai` | `False` | Auto-instrument Pydantic AI agents. `True` uses defaults; a mapping sets `InstrumentationSettings` (e.g. `{"include_content": False}`). |
 | `openllmetry` | — | OpenLLMetry config to auto-instrument LLM SDKs. |
 
 ### Events & enrichment
@@ -118,5 +118,5 @@ only when integrating custom exporters/processors.
 | Parameter | Default | Purpose |
 |---|---|---|
 | `auto_flush` | `False` | Flush after each invocation (AWS Lambda, Cloud Functions, …). |
-| `preset` | — | Preset config bundle from the `presets` module. |
+| `preset` | — | Preset config bundle from the `presets` module, e.g. `datadog_preset(api_key=..., enable_logs=True)`. A preset's `logs` setting applies when you don't pass `logs`. |
 | `validation` | — | Event-name / attribute validation config. |

@@ -126,7 +126,7 @@ from .rate_limiter import RateLimiter
 from .sampling import AdaptiveSampler, AdaptiveSamplingProcessor
 from .semantic_helpers import trace_db, trace_http, trace_llm, trace_messaging
 from .serverless import auto_flush_if_serverless, is_serverless, register_auto_flush
-from .shutdown import shutdown, shutdown_sync
+from .shutdown import flush, shutdown, shutdown_sync
 from .span_processors import (
     AttributeRedactingProcessor,
     AttributeRedactorConfig,
@@ -304,6 +304,7 @@ __all__ = [
     "assert_trace_duration",
     "get_span_attribute",
     # Lifecycle
+    "flush",
     "shutdown",
     "shutdown_sync",
     # Configuration (optional, requires pydantic)
