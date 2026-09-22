@@ -14,7 +14,7 @@ from opentelemetry.trace import StatusCode
 from autotel import init, trace
 from autotel.exporters import InMemorySpanExporter
 
-# The plugin's published wheel needs Python 3.12+, while autotel supports 3.10+.
+# Dev-only reporting plugin - the suite still runs without it installed.
 story = pytest.importorskip("executable_stories").story
 
 
