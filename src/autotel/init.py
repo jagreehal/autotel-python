@@ -691,11 +691,17 @@ def init(
             # or can be called explicitly in async context
             pass
 
-    # Set up metrics if provided
-    if isinstance(metrics, dict):
+    # metrics=True reuses the MeterProvider set up above; a dict configures Metric directly
+    if isinstance(metrics, dict) or (metrics is True and meter_provider is not None):
         from .metrics import Metric, set_metrics
 
-        metrics_instance = Metric(**metrics) if isinstance(metrics, dict) else metrics
+        if isinstance(metrics, dict):
+            metrics_instance = Metric(**metrics)
+        else:
+            metrics_instance = Metric(
+                namespace=service or "default",
+                endpoint=resolved_endpoint,
+            )
         set_metrics(metrics_instance)
         # Register for shutdown
         from .shutdown import set_metrics_for_shutdown

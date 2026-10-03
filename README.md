@@ -345,6 +345,43 @@ def process_batch(batch):
     return [transform(item) for item in batch]
 ```
 
+Wrap an existing function without the decorator syntax:
+
+```python
+verify_pin = trace("bank.verify_pin", verify_pin)
+```
+
+### Wide events with `get_request_logger()`
+
+Collect fields as a request runs and land them on one span as dotted attributes:
+
+```python
+from autotel import get_request_logger, trace
+
+
+@trace
+def withdraw(request):
+    log = get_request_logger()
+    log.set({"atm": {"branch": request.branch}})
+    log.set({"withdrawal": {"amount_pence": request.amount, "result": "dispensed"}})
+    return log.emit_now()  # sets atm.branch, withdrawal.amount_pence, withdrawal.result
+```
+
+`get_request_logger()` raises `RuntimeError` outside an active span. Calls to `set()` after `emit_now()` warn and drop the fields.
+
+### Cohort analysis
+
+`compare_cohorts()` ranks the field values that separate slow requests from normal ones. `bucket()` turns numbers into range labels you can group by:
+
+```python
+from autotel import bucket, compare_cohorts
+
+bucket(2500, [1000, 2000, 5000])  # "2000-5000"
+
+for diff in compare_cohorts(outlier=slow_events, baseline=normal_events):
+    print(diff.field, diff.value, round(diff.difference, 2))
+```
+
 ### `span()` context manager
 
 ```python
@@ -1010,6 +1047,15 @@ marketing_events.trackEvent("campaign.viewed", {"campaignId": "123"})
 
 Auto-enrichment adds `traceId`, `spanId`, `operation.name`, `service.version`, and `deployment.environment` to every event automatically.
 
+**Write events to a file:** `FileSubscriber` appends each event as one NDJSON line. It writes straight away when no event loop is running, so plain scripts work too:
+
+```python
+from autotel import FileSubscriber, init, track
+
+init(service="atm", subscribers=[FileSubscriber("events.ndjson")])
+track("atm.cash_withdrawn", {"amount": 40})
+```
+
 ## Logging with Trace Context
 
 **Bring your own logger** and autotel automatically instruments it to inject trace context.
@@ -1300,6 +1346,20 @@ async def fetch_data(url: str):
         res = await httpx.get(url, headers=headers)
         ctx.set_attribute("http.status_code", res.status_code)
         return res.json()
+```
+
+On the receiving side, `extract_trace_context()` reads `traceparent` and baggage from incoming headers:
+
+```python
+from opentelemetry import context
+
+from autotel.http import extract_trace_context
+
+token = context.attach(extract_trace_context(request.headers))
+try:
+    handle(request)
+finally:
+    context.detach(token)
 ```
 
 ## Database Instrumentation
@@ -1642,7 +1702,7 @@ Use cases:
 
 Production ready. All core features implemented and tested.
 
-**Version:** 0.7.0
+**Version:** 0.8.0
 **Python:** 3.10+
 **License:** MIT
 

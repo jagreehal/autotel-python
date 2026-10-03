@@ -421,6 +421,11 @@ def test_init_metrics_and_logs_true_use_signal_paths() -> None:
     }
     assert "http://collector:4318/v1/metrics" in metric_endpoints
 
+    from autotel import create_counter, get_metrics
+
+    create_counter("orders.placed").add(1)
+    assert get_metrics()._meter_provider is meter_provider
+
     logger_provider = otel_logs.get_logger_provider()
     assert isinstance(logger_provider, LoggerProvider)
     log_processor = logger_provider._multi_log_record_processor._log_record_processors[0]

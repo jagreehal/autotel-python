@@ -5,6 +5,7 @@ One-line initialization, ergonomic decorators, and production-ready by default.
 """
 
 from .__version__ import __version__
+from .analysis import CohortDifference, bucket, compare_cohorts
 from .baggage_span_processor import BaggageSpanProcessor
 from .business_baggage import (
     BaggageFieldDefinition,
@@ -17,6 +18,7 @@ from .business_baggage import (
     get_business_baggage,
 )
 from .circuit_breaker import CircuitBreaker, CircuitState
+from .constants import AUTOTEL_DEBUG_BAGGAGE_KEY
 from .context import TraceContext
 from .db import instrument_database, trace_db_query
 from .debug import (
@@ -124,6 +126,7 @@ from .operation_context import get_operation_context, run_in_operation_context
 from .pii_redaction import PIIRedactor
 from .processors import BatchSpanProcessor, SimpleSpanProcessor
 from .rate_limiter import RateLimiter
+from .request_logger import RequestLogger, flatten_to_attributes, get_request_logger
 from .sampling import AdaptiveSampler, AdaptiveSamplingProcessor
 from .semantic_helpers import trace_db, trace_http, trace_llm, trace_messaging
 from .serverless import auto_flush_if_serverless, is_serverless, register_auto_flush
@@ -148,6 +151,7 @@ from .structured_error import (
 )
 from .subscribers import EventSubscriber as EventSubscriberBase
 from .subscribers import (
+    FileSubscriber,
     PostHogSubscriber,
     SlackSubscriber,
     StreamingEventSubscriber,
@@ -222,6 +226,14 @@ __all__ = [
     "init",
     "trace",
     "TraceContext",
+    # Wide events / analysis
+    "get_request_logger",
+    "RequestLogger",
+    "flatten_to_attributes",
+    "bucket",
+    "compare_cohorts",
+    "CohortDifference",
+    "AUTOTEL_DEBUG_BAGGAGE_KEY",
     # Functional API
     "instrument",
     "span",
@@ -282,6 +294,7 @@ __all__ = [
     "Event",
     "EventSubscriber",
     "EventSubscriberBase",
+    "FileSubscriber",
     "PostHogSubscriber",
     "SlackSubscriber",
     "StreamingEventSubscriber",

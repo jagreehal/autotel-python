@@ -6,8 +6,6 @@ that prevents common issues:
 - PII leakage (sensitive data in headers)
 - Value overflow (unbounded string lengths)
 
-Implements feature parity with Go's baggage.Business and Node's defineBusinessBaggage.
-
 Example:
     >>> from autotel.business_baggage import create_safe_baggage_schema
     >>>
@@ -540,7 +538,7 @@ class SafeBaggageSchema:
         return full_key
 
     def _hash_value(self, value: str) -> str:
-        """Hash a value using FNV-1a for consistency with Node.js implementation."""
+        """Hash a value using FNV-1a."""
         # FNV-1a hash algorithm
         hash_val = 2166136261
         for char in value:

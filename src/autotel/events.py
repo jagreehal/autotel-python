@@ -34,12 +34,7 @@ class Event:
     Sends events to configured subscribers (PostHog, Mixpanel, Amplitude, etc.)
     with automatic enrichment from trace context.
 
-    Note: In the Node.js version, there's both:
-    - `Metric.trackEvent()` → sends to OTLP (OpenTelemetry metrics)
-    - `Event.trackEvent()` → sends to subscribers (PostHog, etc.)
-
-    This Python class handles the Event side (subscribers).
-    For OpenTelemetry metrics, use the Metric class from metrics.py
+    For OpenTelemetry metrics, use the Metric class from metrics.py.
     """
 
     def __init__(
@@ -105,9 +100,31 @@ class Event:
             except Exception as e:
                 logger.error(f"Event worker error: {e}", exc_info=True)
 
+    def _send_sync(self, event: str, properties: dict[str, Any]) -> list[EventSubscriber]:
+        """Send to subscribers that implement send_sync(); return the ones handled."""
+        handled: list[EventSubscriber] = []
+        for subscriber in self.subscribers:
+            send_sync = getattr(subscriber, "send_sync", None)
+            if not callable(send_sync):
+                continue
+            handled.append(subscriber)
+            breaker = self._circuit_breakers[subscriber]
+            if breaker.is_open():
+                continue
+            try:
+                send_sync(event, properties)
+                breaker.record_success()
+            except Exception as e:
+                breaker.record_failure()
+                logger.error(f"Event subscriber failed: {e}", exc_info=True)
+        return handled
+
     async def _send_to_subscribers(self, event: dict[str, Any]) -> None:
         """Send event to all subscribers with circuit breaker protection."""
+        sent_sync = event.get("sent_sync", ())
         for subscriber in self.subscribers:
+            if subscriber in sent_sync:
+                continue
             breaker = self._circuit_breakers[subscriber]
 
             if breaker.is_open():
@@ -158,17 +175,25 @@ class Event:
                 except Exception:
                     pass  # Graceful degradation if name not available
 
+        item: dict[str, Any] = {"name": event, "properties": props}
+
+        # Without a running loop, subscribers with send_sync() write now;
+        # the rest stay queued for the next drain.
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            item["sent_sync"] = self._send_sync(event, props)
+            if len(item["sent_sync"]) == len(self.subscribers):
+                return
+
         # Add to queue (non-blocking)
         try:
-            self.queue.put_nowait({"name": event, "properties": props})
+            self.queue.put_nowait(item)
         except asyncio.QueueFull:
             logger.warning("Event queue full, dropping event")
 
     async def shutdown(self) -> None:
         """Gracefully shutdown (flush pending events)."""
-        if not self._running:
-            return
-
         self._running = False
 
         # Cancel worker task
@@ -180,6 +205,7 @@ class Event:
                 pass
             except Exception as e:
                 logger.error(f"Error cancelling worker task: {e}", exc_info=True)
+            self._worker_task = None
 
         self._started = False
 

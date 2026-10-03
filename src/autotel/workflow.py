@@ -5,8 +5,6 @@ in event-driven architectures:
 
 - **Workflows**: Multi-step processes with ordered execution
 - **Sagas**: Workflows with compensation (rollback) handling
-
-Implements feature parity with Go's workflow.Workflow and Node's traceWorkflow.
 """
 
 from __future__ import annotations

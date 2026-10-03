@@ -121,16 +121,9 @@ def trace(
     Immediate execution: Executes immediately
         >>> result = trace(lambda ctx: create_user({"id": "123"}))
 
-    IMPORTANT: Pattern detection uses inspect.signature() to inspect function
-    signatures WITHOUT executing the function. This avoids side effects that could
-    occur if the function starts coroutines or performs work during pattern detection
-    (similar to the Node.js async function bug where calling async functions for
-    pattern detection would cause them to start executing synchronously until the
-    first await).
-
-    The fix: We use inspect.signature() to inspect the function signature and
-    determine if it's a factory pattern (returns a function) or immediate execution
-    (returns a value), without ever calling the function during detection.
+    Pattern detection uses inspect.signature() to tell a factory (returns a
+    function) from immediate execution (returns a value) without calling the
+    function, so detection never starts coroutines or runs side effects.
 
     Args:
         fn: Function to trace. Can be:
