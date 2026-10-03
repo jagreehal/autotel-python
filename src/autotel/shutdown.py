@@ -1,5 +1,7 @@
 """Graceful shutdown for autotel."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 
@@ -42,6 +44,12 @@ def set_logger_provider_for_shutdown(provider: LoggerProvider) -> None:
     _logger_provider = provider
 
 
+def reset_shutdown_state() -> None:
+    """Allow shutdown() to run again after a re-init (internal use)."""
+    global _shutdown_complete
+    _shutdown_complete = False
+
+
 def flush(timeout: float = 5.0) -> None:
     """
     Force-export everything buffered, keeping autotel running.
@@ -72,6 +80,55 @@ def flush(timeout: float = 5.0) -> None:
             logger.error(f"Error flushing {type(target).__name__}: {e}", exc_info=True)
 
 
+def _shutdown_otel_providers(timeout: float) -> None:
+    """Flush and shut down meter/logger/tracer providers (sync)."""
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+
+    timeout_millis = int(timeout * 1000)
+
+    if _meter_provider:
+        try:
+            _meter_provider.force_flush(timeout_millis=timeout_millis)
+            _meter_provider.shutdown()
+        except Exception as e:
+            logger.error(f"Error shutting down meter provider: {e}", exc_info=True)
+
+    if _logger_provider:
+        try:
+            _logger_provider.force_flush(timeout_millis=timeout_millis)
+            _logger_provider.shutdown()
+        except Exception as e:
+            logger.error(f"Error shutting down logger provider: {e}", exc_info=True)
+
+    provider = trace.get_tracer_provider()
+    if isinstance(provider, TracerProvider):
+        try:
+            provider.force_flush(timeout_millis=timeout_millis)
+            provider.shutdown()
+        except Exception as e:
+            logger.error(f"Error shutting down tracer provider: {e}", exc_info=True)
+
+
+async def _shutdown_async_aux(timeout: float) -> None:
+    """Drain the Event and Metric helpers."""
+    if _event_instance:
+        try:
+            await asyncio.wait_for(_event_instance.shutdown(), timeout=timeout)
+        except asyncio.TimeoutError:
+            logger.warning(f"Event shutdown timed out after {timeout}s")
+        except Exception as e:
+            logger.error(f"Error shutting down events: {e}", exc_info=True)
+
+    if _metrics_instance:
+        try:
+            await asyncio.wait_for(_metrics_instance.shutdown(), timeout=timeout)
+        except asyncio.TimeoutError:
+            logger.warning(f"Metrics shutdown timed out after {timeout}s")
+        except Exception as e:
+            logger.error(f"Error shutting down metrics: {e}", exc_info=True)
+
+
 async def shutdown(timeout: float = 5.0) -> None:
     """
     Gracefully shutdown autotel.
@@ -91,48 +148,8 @@ async def shutdown(timeout: float = 5.0) -> None:
         logger.info("autotel shutdown skipped (already completed)")
         return
 
-    from opentelemetry import trace
-    from opentelemetry.sdk.trace import TracerProvider
-
-    # Shutdown events if initialized
-    if _event_instance:
-        try:
-            await asyncio.wait_for(_event_instance.shutdown(), timeout=timeout)
-        except asyncio.TimeoutError:
-            logger.warning(f"Event shutdown timed out after {timeout}s")
-        except Exception as e:
-            logger.error(f"Error shutting down events: {e}", exc_info=True)
-
-    # Shutdown metrics if initialized
-    if _metrics_instance:
-        try:
-            await asyncio.wait_for(_metrics_instance.shutdown(), timeout=timeout)
-        except asyncio.TimeoutError:
-            logger.warning(f"Metrics shutdown timed out after {timeout}s")
-        except Exception as e:
-            logger.error(f"Error shutting down metrics: {e}", exc_info=True)
-
-    if _meter_provider:
-        try:
-            _meter_provider.force_flush(timeout_millis=int(timeout * 1000))
-            _meter_provider.shutdown()
-        except Exception as e:
-            logger.error(f"Error shutting down meter provider: {e}", exc_info=True)
-
-    if _logger_provider:
-        try:
-            _logger_provider.force_flush(timeout_millis=int(timeout * 1000))
-            _logger_provider.shutdown()
-        except Exception as e:
-            logger.error(f"Error shutting down logger provider: {e}", exc_info=True)
-
-    # Flush spans
-    provider = trace.get_tracer_provider()
-    if isinstance(provider, TracerProvider):
-        try:
-            provider.force_flush(timeout_millis=int(timeout * 1000))
-        except Exception as e:
-            logger.error(f"Error flushing spans: {e}", exc_info=True)
+    await _shutdown_async_aux(timeout)
+    _shutdown_otel_providers(timeout)
 
     _shutdown_complete = True
     logger.info("autotel shutdown complete")
@@ -142,21 +159,27 @@ def shutdown_sync(timeout: float = 5.0) -> None:
     """
     Synchronous version of shutdown.
 
+    Inside a running event loop, OTel providers flush and shut down
+    synchronously, and the async event/metric drains run as a task on that loop.
+
     Args:
         timeout: Maximum time to wait for shutdown in seconds
     """
+    global _shutdown_complete
     if _shutdown_complete:
         logger.info("autotel shutdown skipped (already completed)")
         return
 
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # If loop is running, schedule shutdown
-            asyncio.create_task(shutdown(timeout))
-        else:
-            # If no loop, run shutdown
-            loop.run_until_complete(shutdown(timeout))
+        running_loop = asyncio.get_running_loop()
     except RuntimeError:
-        # No event loop - create one
-        asyncio.run(shutdown(timeout))
+        running_loop = None
+
+    if running_loop is not None:
+        _shutdown_otel_providers(timeout)
+        running_loop.create_task(_shutdown_async_aux(timeout))
+        _shutdown_complete = True
+        logger.info("autotel shutdown complete")
+        return
+
+    asyncio.run(shutdown(timeout))

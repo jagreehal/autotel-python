@@ -46,6 +46,7 @@ from .gen_ai_events import (
     record_stream_first_token,
     record_tool_call,
 )
+from .gen_ai_spans import execute_tool, invoke_agent
 from .helpers import (
     add_event,
     get_all_baggage,
@@ -239,6 +240,8 @@ __all__ = [
     "record_gen_ai_retry",
     "record_tool_call",
     "record_stream_first_token",
+    "invoke_agent",
+    "execute_tool",
     # Convenience Helpers
     "set_attributes",
     "set_attribute",
