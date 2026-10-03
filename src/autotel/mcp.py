@@ -265,6 +265,7 @@ def _make_client_wrapper(
 ) -> Callable[..., Any]:
     """Create a client wrapper preserving sync/async behaviour."""
     tracer = trace.get_tracer(__name__)
+    meta_kwarg = _meta_kwarg_name(original)
 
     async def async_wrapper(_self: Any, *args: Any, **kwargs: Any) -> Any:
         span_name, name, arg_payload, new_args, new_kwargs = _prepare_client_call(
@@ -272,6 +273,7 @@ def _make_client_wrapper(
             args,
             kwargs,
             allow_string_name=allow_string_name,
+            meta_kwarg=meta_kwarg,
         )
 
         with tracer.start_as_current_span(span_name) as span:
@@ -291,6 +293,7 @@ def _make_client_wrapper(
             args,
             kwargs,
             allow_string_name=allow_string_name,
+            meta_kwarg=meta_kwarg,
         )
 
         with tracer.start_as_current_span(span_name) as span:
@@ -307,12 +310,30 @@ def _make_client_wrapper(
     return async_wrapper if is_async else sync_wrapper
 
 
+def _meta_kwarg_name(method: Callable[..., Any]) -> str | None:
+    """Return the keyword that carries request ``_meta`` for ``method``, if any.
+
+    mcp>=2 (protocol 2026-07-28) takes ``meta=`` and serializes it to ``params._meta``,
+    adding W3C trace context itself (SEP-414). Older clients took ``_meta=``.
+    """
+    try:
+        params = inspect.signature(method).parameters
+    except (TypeError, ValueError):
+        return "_meta"
+    if "meta" in params:
+        return "meta"
+    if "_meta" in params or any(p.kind is p.VAR_KEYWORD for p in params.values()):
+        return "_meta"
+    return None
+
+
 def _prepare_client_call(
     operation: str,
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
     *,
     allow_string_name: bool,
+    meta_kwarg: str | None = "_meta",
 ) -> tuple[str, str, Any, list[Any], dict[str, Any]]:
     """Prepare client call arguments with injected _meta."""
     meta = inject_otel_context_to_meta()
@@ -325,20 +346,24 @@ def _prepare_client_call(
     if allow_string_name and args_list and isinstance(args_list[0], str):
         name = name or args_list[0]
         if len(args_list) > 1 and isinstance(args_list[1], MutableMapping):
+            arg_payload = arg_payload or dict(args_list[1])
+        if meta_kwarg == "meta":
+            # Request meta has its own parameter; never smuggle it into tool arguments.
+            kwargs_copy["meta"] = _merge_meta(kwargs_copy.get("meta"), meta)
+        elif len(args_list) > 1 and isinstance(args_list[1], MutableMapping):
             arguments_dict = dict(args_list[1])
-            arg_payload = arg_payload or arguments_dict
             arguments_dict["_meta"] = _merge_meta(arguments_dict.get("_meta"), meta)
             args_list[1] = arguments_dict
-        else:
-            kwargs_copy["_meta"] = _merge_meta(kwargs_copy.get("_meta"), meta)
+        elif meta_kwarg:
+            kwargs_copy[meta_kwarg] = _merge_meta(kwargs_copy.get(meta_kwarg), meta)
     elif args_list and isinstance(args_list[0], MutableMapping):
         params = dict(args_list[0])
         name = params.get("name") if isinstance(params.get("name"), str) else name
         arg_payload = params.get("arguments", arg_payload)
         params["_meta"] = _merge_meta(params.get("_meta"), meta)
         args_list[0] = params
-    else:
-        kwargs_copy["_meta"] = _merge_meta(kwargs_copy.get("_meta"), meta)
+    elif meta_kwarg:
+        kwargs_copy[meta_kwarg] = _merge_meta(kwargs_copy.get(meta_kwarg), meta)
 
     resolved_name = name or "unknown"
     span_name = f"mcp.client.{operation}.{resolved_name}"

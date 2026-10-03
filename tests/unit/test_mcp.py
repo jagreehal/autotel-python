@@ -95,6 +95,55 @@ async def test_instrument_mcp_client_injects_meta_and_traces(
 
 
 @pytest.mark.asyncio
+async def test_instrument_mcp_client_uses_meta_kwarg_for_mcp_v2(
+    exporter: InMemorySpanExporter,
+) -> None:
+    """mcp>=2 renamed ``_meta`` to ``meta``; inject there and leave tool arguments alone."""
+    _ = exporter
+
+    class V2Client:
+        """Mirrors ``mcp.client.Client.call_tool`` from mcp 2.x."""
+
+        def __init__(self: Any) -> None:
+            self.calls: list[tuple[dict[str, Any] | None, dict[str, Any] | None]] = []
+
+        async def call_tool(
+            self: Any,
+            name: str,
+            arguments: dict[str, Any] | None = None,
+            *,
+            meta: dict[str, Any] | None = None,
+        ) -> dict[str, Any]:
+            self.calls.append((arguments, meta))
+            return {"ok": True}
+
+    client = instrument_mcp_client(V2Client())
+
+    with trace.get_tracer(__name__).start_as_current_span("parent"):
+        await client.call_tool("echo", arguments={"message": "hi"})
+        await client.call_tool("echo", {"message": "hi"})
+
+    for arguments, meta in client.calls:
+        assert arguments == {"message": "hi"}
+        assert meta and meta.get("traceparent")
+
+
+@pytest.mark.asyncio
+async def test_instrument_mcp_client_skips_meta_when_unsupported(
+    exporter: InMemorySpanExporter,
+) -> None:
+    """A client that accepts no meta kwarg must not be passed one."""
+    _ = exporter
+
+    class StrictClient:
+        async def call_tool(self: Any, name: str, arguments: dict[str, Any] | None = None) -> str:
+            return name
+
+    client = instrument_mcp_client(StrictClient())
+    assert await client.call_tool("echo", arguments={"message": "hi"}) == "echo"
+
+
+@pytest.mark.asyncio
 async def test_instrument_mcp_server_extracts_meta_and_traces(
     exporter: InMemorySpanExporter,
 ) -> None:
@@ -138,3 +187,30 @@ async def test_instrument_mcp_server_extracts_meta_and_traces(
     assert server_span.attributes.get("mcp.type") == "tool"
     assert server_span.attributes.get("mcp.tool.name") == "echo"
     assert server_span.context.trace_id == parent.get_span_context().trace_id
+
+
+@pytest.mark.asyncio
+async def test_instrument_real_mcp_client_propagates_over_stateless_protocol(
+    exporter: InMemorySpanExporter,
+) -> None:
+    """Against the real mcp>=2 SDK, both call styles keep one trace across client and server."""
+    _ = exporter
+    mcp = pytest.importorskip("mcp")
+    from mcp.server.mcpserver import MCPServer
+
+    server = MCPServer("autotel-test")
+    seen: list[int] = []
+
+    @server.tool()
+    def whoami() -> str:
+        seen.append(trace.get_current_span().get_span_context().trace_id)
+        return "ok"
+
+    async with mcp.Client(server) as client:
+        instrument_mcp_client(client)
+        with trace.get_tracer(__name__).start_as_current_span("parent") as parent:
+            await client.call_tool("whoami", arguments={})
+            await client.call_tool("whoami", {})
+
+    trace_id = parent.get_span_context().trace_id
+    assert seen == [trace_id, trace_id]
