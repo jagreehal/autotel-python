@@ -46,11 +46,13 @@ def test_generate_workflow_id_with_prefix() -> None:
 
 def test_create_workflow_headers(exporter: Any) -> None:
     """create_workflow_headers returns headers with baggage key."""
-    headers = create_workflow_headers({
-        "workflow_id": "wf-123",
-        "workflow_name": "TestWorkflow",
-        "step_index": 1,
-    })
+    headers = create_workflow_headers(
+        {
+            "workflow_id": "wf-123",
+            "workflow_name": "TestWorkflow",
+            "step_index": 1,
+        }
+    )
     assert "baggage" in headers
     assert "workflow.workflow_id" in headers["baggage"] or "wf-123" in headers["baggage"]
 

@@ -156,7 +156,9 @@ def test_trace_func_no_orphan_spans(exporter: Any) -> None:
 
     result = trace_func(immediate_func)
     assert result == 1
-    assert execution_count == 1, "Function should execute exactly once, not during pattern detection"
+    assert execution_count == 1, (
+        "Function should execute exactly once, not during pattern detection"
+    )
 
     # Verify we have exactly one span
     spans = exporter.get_finished_spans()
@@ -166,6 +168,7 @@ def test_trace_func_no_orphan_spans(exporter: Any) -> None:
 @pytest.mark.asyncio
 async def test_trace_func_async_immediate_execution(exporter: Any) -> None:
     """Test trace_func with async immediate execution pattern."""
+
     async def async_func(ctx: Any) -> str:
         ctx.set_attribute("async", True)
         return "done"
@@ -192,7 +195,9 @@ async def test_trace_func_async_no_double_execution(exporter: Any) -> None:
 
     result = await trace_func(async_func)
     assert result == 1
-    assert execution_count == 1, "Async function should execute exactly once, not during pattern detection"
+    assert execution_count == 1, (
+        "Async function should execute exactly once, not during pattern detection"
+    )
 
     spans = exporter.get_finished_spans()
     assert len(spans) == 1, "Should have exactly 1 span, not multiple from pattern detection"

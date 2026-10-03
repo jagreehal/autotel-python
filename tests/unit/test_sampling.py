@@ -231,17 +231,13 @@ def test_has_sampled_link_helper_method() -> None:
     assert sampler._has_sampled_link(span_no_links) is False
 
     # Mock span with unsampled link
-    unsampled_ctx = SpanContext(
-        trace_id=1, span_id=1, is_remote=True, trace_flags=TraceFlags(0x00)
-    )
+    unsampled_ctx = SpanContext(trace_id=1, span_id=1, is_remote=True, trace_flags=TraceFlags(0x00))
     span_unsampled = MagicMock()
     span_unsampled.links = (Link(unsampled_ctx),)
     assert sampler._has_sampled_link(span_unsampled) is False
 
     # Mock span with sampled link
-    sampled_ctx = SpanContext(
-        trace_id=1, span_id=1, is_remote=True, trace_flags=TraceFlags(0x01)
-    )
+    sampled_ctx = SpanContext(trace_id=1, span_id=1, is_remote=True, trace_flags=TraceFlags(0x01))
     span_sampled = MagicMock()
     span_sampled.links = (Link(sampled_ctx),)
     assert sampler._has_sampled_link(span_sampled) is True
@@ -253,9 +249,7 @@ def test_has_sampled_link_helper_method() -> None:
 def test_create_link_from_headers_valid_traceparent() -> None:
     """Test creating a link from valid W3C traceparent header."""
     # Valid W3C traceparent: version-traceid-spanid-flags
-    headers = {
-        "traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
-    }
+    headers = {"traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"}
     link = create_link_from_headers(headers)
 
     assert link is not None
@@ -265,9 +259,7 @@ def test_create_link_from_headers_valid_traceparent() -> None:
 
 def test_create_link_from_headers_unsampled() -> None:
     """Test creating a link from traceparent with sampled=0."""
-    headers = {
-        "traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-00"
-    }
+    headers = {"traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-00"}
     link = create_link_from_headers(headers)
 
     assert link is not None
@@ -277,9 +269,7 @@ def test_create_link_from_headers_unsampled() -> None:
 
 def test_create_link_from_headers_with_attributes() -> None:
     """Test creating a link with custom attributes."""
-    headers = {
-        "traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
-    }
+    headers = {"traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"}
     attrs = {"relationship": "producer", "queue": "orders"}
     link = create_link_from_headers(headers, attributes=attrs)
 
@@ -306,9 +296,7 @@ def test_create_link_from_headers_invalid_traceparent() -> None:
 def test_create_link_from_headers_case_insensitive() -> None:
     """Test that header lookup is case-insensitive (per HTTP spec)."""
     # Note: OpenTelemetry's extract() handles case normalization
-    headers = {
-        "traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
-    }
+    headers = {"traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"}
     link = create_link_from_headers(headers)
     assert link is not None
 
@@ -321,21 +309,15 @@ def test_extract_links_from_batch_multiple_messages() -> None:
     messages = [
         {
             "body": "message1",
-            "headers": {
-                "traceparent": "00-11111111111111111111111111111111-1111111111111111-01"
-            },
+            "headers": {"traceparent": "00-11111111111111111111111111111111-1111111111111111-01"},
         },
         {
             "body": "message2",
-            "headers": {
-                "traceparent": "00-22222222222222222222222222222222-2222222222222222-01"
-            },
+            "headers": {"traceparent": "00-22222222222222222222222222222222-2222222222222222-01"},
         },
         {
             "body": "message3",
-            "headers": {
-                "traceparent": "00-33333333333333333333333333333333-3333333333333333-00"
-            },
+            "headers": {"traceparent": "00-33333333333333333333333333333333-3333333333333333-00"},
         },
     ]
 
@@ -360,9 +342,7 @@ def test_extract_links_from_batch_missing_headers() -> None:
         {"body": "message1"},  # No headers key
         {
             "body": "message2",
-            "headers": {
-                "traceparent": "00-22222222222222222222222222222222-2222222222222222-01"
-            },
+            "headers": {"traceparent": "00-22222222222222222222222222222222-2222222222222222-01"},
         },
         {"body": "message3", "headers": {}},  # Empty headers
     ]
@@ -377,9 +357,7 @@ def test_extract_links_from_batch_custom_headers_key() -> None:
     messages = [
         {
             "body": "message1",
-            "metadata": {
-                "traceparent": "00-11111111111111111111111111111111-1111111111111111-01"
-            },
+            "metadata": {"traceparent": "00-11111111111111111111111111111111-1111111111111111-01"},
         },
     ]
 
@@ -394,9 +372,7 @@ def test_extract_links_from_batch_invalid_headers_skipped() -> None:
         {"body": "message1", "headers": {"traceparent": "invalid"}},
         {
             "body": "message2",
-            "headers": {
-                "traceparent": "00-22222222222222222222222222222222-2222222222222222-01"
-            },
+            "headers": {"traceparent": "00-22222222222222222222222222222222-2222222222222222-01"},
         },
     ]
 

@@ -33,11 +33,13 @@ from opentelemetry._logs import set_logger_provider
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 
 # Manual resource setup
-resource = Resource.create({
-    "service.name": os.getenv("OTEL_SERVICE_NAME", "flask-api"),
-    "service.namespace": "demo",
-    "deployment.environment": os.getenv("APP_ENV", "dev"),
-})
+resource = Resource.create(
+    {
+        "service.name": os.getenv("OTEL_SERVICE_NAME", "flask-api"),
+        "service.namespace": "demo",
+        "deployment.environment": os.getenv("APP_ENV", "dev"),
+    }
+)
 
 # Manual tracer setup
 trace_provider = TracerProvider(resource=resource)
@@ -70,7 +72,7 @@ autotel.init(
     instrumentation=["flask", "openai"],  # Auto-instruments these frameworks
     subscribers=[
         autotel.subscribers.OTLPSubscriber(),  # OTLP export (traces, metrics, logs)
-    ]
+    ],
 )
 ```
 
@@ -187,12 +189,18 @@ with tracer.start_as_current_span(
 
         # Manual usage tracking (15+ lines!)
         usage = getattr(completion, "usage", None) or {}
-        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or usage.get("prompt_tokens", 0) or 0)
-        completion_tokens = int(getattr(usage, "completion_tokens", 0) or usage.get("completion_tokens", 0) or 0)
+        prompt_tokens = int(
+            getattr(usage, "prompt_tokens", 0) or usage.get("prompt_tokens", 0) or 0
+        )
+        completion_tokens = int(
+            getattr(usage, "completion_tokens", 0) or usage.get("completion_tokens", 0) or 0
+        )
 
         # Manual metric recording
         token_counter.add(prompt_tokens, {"llm.token_type": "prompt", "llm.model": DEFAULT_MODEL})
-        token_counter.add(completion_tokens, {"llm.token_type": "completion", "llm.model": DEFAULT_MODEL})
+        token_counter.add(
+            completion_tokens, {"llm.token_type": "completion", "llm.model": DEFAULT_MODEL}
+        )
 
         # Manual span attribute setting (10+ lines!)
         llm_span.set_attribute("llm.usage.prompt_tokens", prompt_tokens)
@@ -221,7 +229,7 @@ completion = client.chat.completions.create(
     messages=[
         {"role": "system", "content": f"You are answering as user type: {user_type}."},
         {"role": "user", "content": question},
-    ]
+    ],
 )
 answer = completion.choices[0].message.content
 
@@ -234,11 +242,10 @@ answer = completion.choices[0].message.content
 # - Tracks errors if the call fails
 
 # Optional: track as a business event
-autotel.track("llm.completion", {
-    "model": "gpt-4",
-    "user_type": user_type,
-    "tokens": completion.usage.total_tokens
-})
+autotel.track(
+    "llm.completion",
+    {"model": "gpt-4", "user_type": user_type, "tokens": completion.usage.total_tokens},
+)
 ```
 
 **Reduction: 95% (40+ lines → 0-2 lines)**
@@ -268,12 +275,14 @@ def extract_otel_context_from_meta(meta: dict | None) -> Context:
         return propagator.extract(carrier)
     return context.get_current()
 
+
 # 10 lines: Inject context to _meta
 def inject_otel_context_to_meta() -> dict:
     carrier = {}
     propagator = get_global_textmap()
     propagator.inject(carrier, context=context.get_current())
     return carrier
+
 
 # 40 lines: Decorator for both sync and async
 def with_otel_context_from_meta(func: F) -> F:
@@ -302,6 +311,7 @@ def with_otel_context_from_meta(func: F) -> F:
     else:
         return sync_wrapper
 
+
 # 35 lines: Wrapper class
 class TracedMCPServer:
     def __init__(self, server):
@@ -316,11 +326,13 @@ class TracedMCPServer:
     def __getattr__(self, name: str) -> Any:
         return getattr(self._server, name)
 
+
 # Usage - still requires manual work!
 @with_otel_context_from_meta  # Must add this
 async def my_tool(query: str, _meta: dict = None):  # Must add _meta param
     # ... finally your code
     pass
+
 
 # Must manually wrap server
 traced_server = TracedMCPServer(server)
@@ -335,6 +347,7 @@ autotel.init(
     service_name="mcp-server",
     instrumentation=["mcp"],  # That's it!
 )
+
 
 # Your MCP tools just work - no decorators, no wrappers, no _meta parameters!
 async def my_tool(query: str):
@@ -439,10 +452,7 @@ user_id = baggage.get("user.id") if baggage else None
 
 ```python
 # Set baggage with simple context manager
-with autotel.with_baggage({
-    "user.id": "123",
-    "tenant.id": "456"
-}):
+with autotel.with_baggage({"user.id": "123", "tenant.id": "456"}):
     # Baggage automatically propagates through:
     # - HTTP headers
     # - MCP _meta fields
@@ -488,7 +498,7 @@ autotel.init(
     instrumentation=["flask", "openai", "requests"],
     subscribers=[
         autotel.subscribers.OTLPSubscriber(),
-    ]
+    ],
 )
 ```
 
@@ -520,11 +530,7 @@ autotel.init(
 
 ```python
 # Only add custom tracking where it provides business value:
-autotel.track("order.created", {
-    "order_id": order.id,
-    "amount": order.total,
-    "user_id": user.id
-})
+autotel.track("order.created", {"order_id": order.id, "amount": order.total, "user_id": user.id})
 ```
 
 ## ✨ Key Benefits

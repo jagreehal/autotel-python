@@ -21,17 +21,22 @@ def process_user_request(user_id: str, action: str) -> None:
         autotel.set_attribute("user.id", user_id)
 
         # Set multiple attributes at once (convenience helper)
-        autotel.set_attributes({
-            "action.type": action,
-            "request.priority": "high",
-            "retry.count": 0,
-        })
+        autotel.set_attributes(
+            {
+                "action.type": action,
+                "request.priority": "high",
+                "retry.count": 0,
+            }
+        )
 
         # Add a span event (convenience helper)
-        autotel.add_event("request.started", {
-            "timestamp": "2024-01-01T00:00:00Z",
-            "user_id": user_id,
-        })
+        autotel.add_event(
+            "request.started",
+            {
+                "timestamp": "2024-01-01T00:00:00Z",
+                "user_id": user_id,
+            },
+        )
 
         # Simulate work
         result = f"Processed {action} for user {user_id}"
@@ -53,10 +58,13 @@ def handle_error_scenario() -> None:
             raise ValueError("Something went wrong")
         except ValueError as e:
             # Record exception with additional context (convenience helper)
-            autotel.record_exception(e, {
-                "error.severity": "high",
-                "error.component": "data_validator",
-            })
+            autotel.record_exception(
+                e,
+                {
+                    "error.severity": "high",
+                    "error.component": "data_validator",
+                },
+            )
             # Handle or re-raise
             print(f"Caught error: {e}")
 
@@ -64,10 +72,15 @@ def handle_error_scenario() -> None:
 def process_with_baggage(tenant_id: str, user_id: str) -> None:
     """Example using baggage helpers."""
     # Set baggage using context manager (for proper scoping)
-    with autotel.with_baggage({
-        "tenant.id": tenant_id,
-        "user.id": user_id,
-    }), autotel.span("tenant_operation"):
+    with (
+        autotel.with_baggage(
+            {
+                "tenant.id": tenant_id,
+                "user.id": user_id,
+            }
+        ),
+        autotel.span("tenant_operation"),
+    ):
         # Read single baggage value (convenience helper)
         current_tenant = autotel.get_baggage("tenant.id")
         print(f"Processing for tenant: {current_tenant}")
@@ -100,10 +113,12 @@ def compare_approaches() -> None:
     print("\n=== Convenience Approach (concise) ===")
     with autotel.span("convenience_example"):
         # Convenience: Direct helpers, no manual checks
-        autotel.set_attributes({
-            "method": "convenience",
-            "status": "active",
-        })
+        autotel.set_attributes(
+            {
+                "method": "convenience",
+                "status": "active",
+            }
+        )
         autotel.add_event("processing")
 
 

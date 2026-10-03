@@ -314,18 +314,14 @@ class Workflow:
                 else:
                     result = handler(ctx, *args, **kwargs)
 
-                self._completed_steps.append(
-                    StepResult(name=name, success=True, result=result)
-                )
+                self._completed_steps.append(StepResult(name=name, success=True, result=result))
                 step_span.add_event("workflow.step.completed")
                 return result
 
             except Exception as e:
                 step_span.record_exception(e)
                 step_span.set_status(StatusCode.ERROR, str(e))
-                self._completed_steps.append(
-                    StepResult(name=name, success=False, error=e)
-                )
+                self._completed_steps.append(StepResult(name=name, success=False, error=e))
                 raise
 
     def step_sync(
@@ -369,18 +365,14 @@ class Workflow:
 
             try:
                 result = handler(ctx, *args, **kwargs)
-                self._completed_steps.append(
-                    StepResult(name=name, success=True, result=result)
-                )
+                self._completed_steps.append(StepResult(name=name, success=True, result=result))
                 step_span.add_event("workflow.step.completed")
                 return result
 
             except Exception as e:
                 step_span.record_exception(e)
                 step_span.set_status(StatusCode.ERROR, str(e))
-                self._completed_steps.append(
-                    StepResult(name=name, success=False, error=e)
-                )
+                self._completed_steps.append(StepResult(name=name, success=False, error=e))
                 raise
 
     @asynccontextmanager

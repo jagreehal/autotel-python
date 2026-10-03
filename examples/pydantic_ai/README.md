@@ -156,22 +156,26 @@ init(
     service="pydantic-ai-app",
     subscribers=[
         PostHogSubscriber(api_key="phc_..."),
-    ]
+    ],
 )
 
 # Note: PostHogSubscriber is kept in subscribers submodule
 # as it's an optional integration (requires httpx)
 
+
 @trace
 async def extract_user_profile(ctx, text: str):
     profile = await agent.run(text, response_model=UserProfile)
-    
+
     # Track events event
-    track("ai.profile.extracted", {
-        "model": "llama3.2",
-        "tokens": getattr(profile, "usage", {}).get("total_tokens", 0),
-    })
-    
+    track(
+        "ai.profile.extracted",
+        {
+            "model": "llama3.2",
+            "tokens": getattr(profile, "usage", {}).get("total_tokens", 0),
+        },
+    )
+
     return profile
 ```
 

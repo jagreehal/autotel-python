@@ -128,8 +128,7 @@ class BusinessBaggage:
             invalid_hash_keys = self.config.hash_keys - self.config.allowed_keys
             if invalid_hash_keys:
                 raise ValueError(
-                    f"hash_keys must be subset of allowed_keys. "
-                    f"Invalid keys: {invalid_hash_keys}"
+                    f"hash_keys must be subset of allowed_keys. Invalid keys: {invalid_hash_keys}"
                 )
 
     def _hash_value(self, value: str) -> str:
@@ -182,8 +181,7 @@ class BusinessBaggage:
         """
         if not self._is_key_allowed(key):
             raise ValueError(
-                f"Key '{key}' is not in allowed_keys. "
-                f"Allowed: {self.config.allowed_keys}"
+                f"Key '{key}' is not in allowed_keys. Allowed: {self.config.allowed_keys}"
             )
 
         sanitized = self._sanitize_value(key, value)
@@ -571,24 +569,28 @@ class SafeBaggageSchema:
         # Check key length
         if len(full_key) > self._options.max_key_length:
             if on_error:
-                on_error({
-                    "type": "key_length",
-                    "key": key,
-                    "message": f"Key '{key}' exceeds max length {self._options.max_key_length}",
-                    "value": None,
-                })
+                on_error(
+                    {
+                        "type": "key_length",
+                        "key": key,
+                        "message": f"Key '{key}' exceeds max length {self._options.max_key_length}",
+                        "value": None,
+                    }
+                )
             return None
 
         # Handle undefined/null with default
         if value is None:
             if field_def.get("required"):
                 if on_error:
-                    on_error({
-                        "type": "validation",
-                        "key": key,
-                        "message": f"Required field '{key}' is missing",
-                        "value": None,
-                    })
+                    on_error(
+                        {
+                            "type": "validation",
+                            "key": key,
+                            "message": f"Required field '{key}' is missing",
+                            "value": None,
+                        }
+                    )
                 return None
             default_val = field_def.get("default_value")
             if default_val is None:
@@ -602,36 +604,42 @@ class SafeBaggageSchema:
         if field_type == "string":
             if not isinstance(value, str):
                 if on_error:
-                    on_error({
-                        "type": "validation",
-                        "key": key,
-                        "message": f"Field '{key}' expected string, got {type(value).__name__}",
-                        "value": value,
-                    })
+                    on_error(
+                        {
+                            "type": "validation",
+                            "key": key,
+                            "message": f"Field '{key}' expected string, got {type(value).__name__}",
+                            "value": value,
+                        }
+                    )
                 return None
             string_value = value
 
         elif field_type == "number":
             if not isinstance(value, int | float):
                 if on_error:
-                    on_error({
-                        "type": "validation",
-                        "key": key,
-                        "message": f"Field '{key}' expected number, got {type(value).__name__}",
-                        "value": value,
-                    })
+                    on_error(
+                        {
+                            "type": "validation",
+                            "key": key,
+                            "message": f"Field '{key}' expected number, got {type(value).__name__}",
+                            "value": value,
+                        }
+                    )
                 return None
             string_value = str(value)
 
         elif field_type == "boolean":
             if not isinstance(value, bool):
                 if on_error:
-                    on_error({
-                        "type": "validation",
-                        "key": key,
-                        "message": f"Field '{key}' expected boolean, got {type(value).__name__}",
-                        "value": value,
-                    })
+                    on_error(
+                        {
+                            "type": "validation",
+                            "key": key,
+                            "message": f"Field '{key}' expected boolean, got {type(value).__name__}",
+                            "value": value,
+                        }
+                    )
                 return None
             string_value = str(value).lower()
 
@@ -639,12 +647,14 @@ class SafeBaggageSchema:
             allowed_values = field_def.get("values", [])
             if str(value) not in allowed_values:
                 if on_error:
-                    on_error({
-                        "type": "validation",
-                        "key": key,
-                        "message": f"Field '{key}' value '{value}' not in allowed values: {', '.join(allowed_values)}",
-                        "value": value,
-                    })
+                    on_error(
+                        {
+                            "type": "validation",
+                            "key": key,
+                            "message": f"Field '{key}' value '{value}' not in allowed values: {', '.join(allowed_values)}",
+                            "value": value,
+                        }
+                    )
                 return None
             string_value = str(value)
 
@@ -654,12 +664,14 @@ class SafeBaggageSchema:
         # PII check
         if self._options.redact_pii and self._contains_pii(string_value):
             if on_error:
-                on_error({
-                    "type": "pii",
-                    "key": key,
-                    "message": f"Field '{key}' contains PII pattern",
-                    "value": "[REDACTED]",
-                })
+                on_error(
+                    {
+                        "type": "pii",
+                        "key": key,
+                        "message": f"Field '{key}' contains PII pattern",
+                        "value": "[REDACTED]",
+                    }
+                )
             string_value = self._hash_value(string_value)
 
         # Hash if requested or high-cardinality
@@ -672,12 +684,14 @@ class SafeBaggageSchema:
         max_len = field_def.get("max_length", self._options.max_value_length)
         if len(string_value) > max_len:
             if on_error:
-                on_error({
-                    "type": "value_length",
-                    "key": key,
-                    "message": f"Field '{key}' value exceeds max length {max_len}",
-                    "value": string_value,
-                })
+                on_error(
+                    {
+                        "type": "value_length",
+                        "key": key,
+                        "message": f"Field '{key}' value exceeds max length {max_len}",
+                        "value": string_value,
+                    }
+                )
             string_value = string_value[:max_len]
 
         return string_value
@@ -781,12 +795,14 @@ class SafeBaggageSchema:
                 entry_size = len(full_key) + len(string_value)
                 if total_size + entry_size > self._options.max_total_size:
                     if self._options.on_error:
-                        self._options.on_error({
-                            "type": "size",
-                            "key": key,
-                            "message": f"Adding '{key}' would exceed max baggage size {self._options.max_total_size}",
-                            "value": value,
-                        })
+                        self._options.on_error(
+                            {
+                                "type": "size",
+                                "key": key,
+                                "message": f"Adding '{key}' would exceed max baggage size {self._options.max_total_size}",
+                                "value": value,
+                            }
+                        )
                     continue
 
                 result_ctx = propagation.set_baggage(full_key, string_value, result_ctx)

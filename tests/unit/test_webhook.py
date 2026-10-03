@@ -66,9 +66,7 @@ def test_stored_trace_context_fields() -> None:
 @pytest.mark.asyncio
 async def test_in_memory_store_save_load(store: InMemoryTraceContextStore) -> None:
     """InMemoryTraceContextStore save and load round-trip."""
-    ctx = StoredTraceContext(
-        trace_id="t1", span_id="s1", trace_flags=1, parked_at=0.0
-    )
+    ctx = StoredTraceContext(trace_id="t1", span_id="s1", trace_flags=1, parked_at=0.0)
     await store.save("key1", ctx)
     loaded = await store.load("key1")
     assert loaded is not None
@@ -86,9 +84,7 @@ async def test_in_memory_store_load_missing(store: InMemoryTraceContextStore) ->
 @pytest.mark.asyncio
 async def test_in_memory_store_delete(store: InMemoryTraceContextStore) -> None:
     """InMemoryTraceContextStore delete removes key."""
-    ctx = StoredTraceContext(
-        trace_id="t1", span_id="s1", trace_flags=1, parked_at=0.0
-    )
+    ctx = StoredTraceContext(trace_id="t1", span_id="s1", trace_flags=1, parked_at=0.0)
     await store.save("key1", ctx)
     await store.delete("key1")
     assert await store.load("key1") is None
@@ -100,9 +96,7 @@ def test_in_memory_store_clear(store: InMemoryTraceContextStore) -> None:
     import asyncio
 
     async def run() -> None:
-        ctx = StoredTraceContext(
-            trace_id="t1", span_id="s1", trace_flags=1, parked_at=0.0
-        )
+        ctx = StoredTraceContext(trace_id="t1", span_id="s1", trace_flags=1, parked_at=0.0)
         await store.save("k1", ctx)
         await store.save("k2", ctx)
         assert store.size == 2
@@ -127,9 +121,7 @@ def test_create_correlation_key() -> None:
 
 def test_to_span_context() -> None:
     """to_span_context returns dict with trace_id, span_id, trace_flags, is_remote."""
-    stored = StoredTraceContext(
-        trace_id="abc", span_id="def", trace_flags=1, parked_at=0.0
-    )
+    stored = StoredTraceContext(trace_id="abc", span_id="def", trace_flags=1, parked_at=0.0)
     d = to_span_context(stored)
     assert d["trace_id"] == "abc"
     assert d["span_id"] == "def"
@@ -172,7 +164,9 @@ async def test_parking_lot_park_and_retrieve(
 
 
 @pytest.mark.asyncio
-async def test_parking_lot_exists(parking_lot: ParkingLot, store: InMemoryTraceContextStore) -> None:
+async def test_parking_lot_exists(
+    parking_lot: ParkingLot, store: InMemoryTraceContextStore
+) -> None:
     """exists returns True when key is stored, False otherwise."""
     tracer = otel_trace.get_tracer(__name__)
     with tracer.start_as_current_span("init"):
@@ -215,9 +209,7 @@ async def test_trace_callback_without_parked_context(
 
 
 @pytest.mark.asyncio
-async def test_trace_callback_with_parked_context(
-    exporter: Any, parking_lot: ParkingLot
-) -> None:
+async def test_trace_callback_with_parked_context(exporter: Any, parking_lot: ParkingLot) -> None:
     """trace_callback links to parked context when it exists."""
     tracer = otel_trace.get_tracer(__name__)
     with tracer.start_as_current_span("initiate-payment"):
@@ -286,9 +278,7 @@ def test_parking_lot_create_link(parking_lot: ParkingLot) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_trace_callback_sync_without_parked_context(
-    exporter: Any, parking_lot: ParkingLot
-) -> None:
+def test_trace_callback_sync_without_parked_context(exporter: Any, parking_lot: ParkingLot) -> None:
     """Sync trace_callback runs and passes a CallbackContext with no parked context."""
 
     @parking_lot.trace_callback(

@@ -18,7 +18,9 @@ from autotel.subscribers import WebhookSubscriber
 class MockWebhookSubscriber(WebhookSubscriber):
     """Mock webhook subscriber that prints payloads instead of sending HTTP requests."""
 
-    def __init__(self, webhook_url: str = "https://hooks.example.com/webhook", headers: dict | None = None):
+    def __init__(
+        self, webhook_url: str = "https://hooks.example.com/webhook", headers: dict | None = None
+    ):
         """Initialize mock subscriber."""
         # Don't call super().__init__ to avoid requiring webhook URL
         self.webhook_url = webhook_url
@@ -59,10 +61,13 @@ async def create_user(ctx, data: dict[str, Any]) -> None:
     ctx.set_attribute("user.email", user["email"])
 
     # Track events event (will be sent to webhook)
-    track("user_created", {
-        "user_id": user["id"],
-        "email": user["email"],
-    })
+    track(
+        "user_created",
+        {
+            "user_id": user["id"],
+            "email": user["email"],
+        },
+    )
 
     return user
 
@@ -77,11 +82,14 @@ async def process_order(ctx, order_id: str, amount: float) -> None:
     ctx.set_attribute("order.amount", amount)
 
     # Track events event (will be sent to webhook)
-    track("order_completed", {
-        "order_id": order_id,
-        "amount": amount,
-        "currency": "USD",
-    })
+    track(
+        "order_completed",
+        {
+            "order_id": order_id,
+            "amount": amount,
+            "currency": "USD",
+        },
+    )
 
     return order
 

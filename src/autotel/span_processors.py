@@ -146,9 +146,7 @@ class FilteringSpanProcessor(SpanProcessor):
         except Exception:
             # Fail open: a broken filter must not drop spans. Surface it so the
             # filter bug is debuggable instead of silently swallowed.
-            logger.warning(
-                "span_filter raised; forwarding span unfiltered", exc_info=True
-            )
+            logger.warning("span_filter raised; forwarding span unfiltered", exc_info=True)
             self.wrapped_processor.on_end(span)
 
     def shutdown(self) -> None:
@@ -269,7 +267,9 @@ def _resolve_normalizer(
         return NORMALIZER_PRESETS[normalizer]
     except KeyError as exc:
         presets = ", ".join(NORMALIZER_PRESETS)
-        raise ValueError(f"Unknown span name normalizer preset: {normalizer}. Use: {presets}") from exc
+        raise ValueError(
+            f"Unknown span name normalizer preset: {normalizer}. Use: {presets}"
+        ) from exc
 
 
 def _resolve_redactor_config(
@@ -345,7 +345,9 @@ BUILTIN_VALUE_PATTERNS: dict[str, ValuePattern] = {
         ),
         mask=_mask_phone,
     ),
-    "jwt": ValuePattern("jwt", re.compile(r"\beyJ[\w-]*\.[\w-]*\.[\w-]*\b"), replacement="eyJ***.***"),
+    "jwt": ValuePattern(
+        "jwt", re.compile(r"\beyJ[\w-]*\.[\w-]*\.[\w-]*\b"), replacement="eyJ***.***"
+    ),
     "bearer": ValuePattern(
         "bearer",
         re.compile(r"\bBearer\s+[\w\-.~+/]{8,}=*", re.IGNORECASE),
@@ -353,7 +355,9 @@ BUILTIN_VALUE_PATTERNS: dict[str, ValuePattern] = {
     ),
     "iban": ValuePattern(
         "iban",
-        re.compile(r"\b[A-Z]{2}\d{2}[\s-]?[\dA-Z]{4}[\s-]?[\dA-Z]{4}[\s-]?[\dA-Z]{4}[\s-]?[\dA-Z]{0,4}[\s-]?[\dA-Z]{0,4}[\s-]?[\dA-Z]{0,4}\b"),
+        re.compile(
+            r"\b[A-Z]{2}\d{2}[\s-]?[\dA-Z]{4}[\s-]?[\dA-Z]{4}[\s-]?[\dA-Z]{4}[\s-]?[\dA-Z]{0,4}[\s-]?[\dA-Z]{0,4}[\s-]?[\dA-Z]{0,4}\b"
+        ),
         mask=_mask_iban,
     ),
 }
@@ -376,9 +380,20 @@ REDACTOR_PRESETS: dict[AttributeRedactorPreset, AttributeRedactorConfig] = {
         ),
     ),
     "strict": AttributeRedactorConfig(
-        key_patterns=(SENSITIVE_KEY_PATTERN, re.compile("bearer", re.IGNORECASE), re.compile("jwt", re.IGNORECASE)),
+        key_patterns=(
+            SENSITIVE_KEY_PATTERN,
+            re.compile("bearer", re.IGNORECASE),
+            re.compile("jwt", re.IGNORECASE),
+        ),
         value_patterns=tuple(BUILTIN_VALUE_PATTERNS.values())
-        + (ValuePattern("apiKeyInValue", re.compile(r"(?:api[_-]?key|apikey|api_secret)[=:][\s\"']*[A-Za-z0-9_-]+", re.IGNORECASE)),),
+        + (
+            ValuePattern(
+                "apiKeyInValue",
+                re.compile(
+                    r"(?:api[_-]?key|apikey|api_secret)[=:][\s\"']*[A-Za-z0-9_-]+", re.IGNORECASE
+                ),
+            ),
+        ),
     ),
     "pci-dss": AttributeRedactorConfig(
         key_patterns=(

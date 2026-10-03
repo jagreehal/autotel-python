@@ -551,9 +551,7 @@ class ConsumerContext(TraceContext):
                 self._group_state.is_active = True
                 self._group_state.state = "stable"
             elif event.type in ("revoked", "lost"):
-                revoked_set = {
-                    f"{p.topic}:{p.partition}" for p in event.partitions
-                }
+                revoked_set = {f"{p.topic}:{p.partition}" for p in event.partitions}
                 self._group_state.assigned_partitions = [
                     p
                     for p in self._group_state.assigned_partitions

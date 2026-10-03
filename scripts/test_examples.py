@@ -78,10 +78,12 @@ def test_functional_example() -> None:
         ctx.set_attribute("user.id", data.get("id", ""))
         return {"id": data.get("id"), "email": data.get("email")}
 
-    user_service = instrument({
-        "create": create_user_func,
-        "get": lambda user_id: {"id": user_id, "name": "John Doe"},
-    })
+    user_service = instrument(
+        {
+            "create": create_user_func,
+            "get": lambda user_id: {"id": user_id, "name": "John Doe"},
+        }
+    )
 
     async def complex_operation():
         with span("database.query") as ctx:
@@ -142,21 +144,27 @@ def test_events_example() -> None:
     @trace
     async def create_user(ctx, data: dict[str, Any]):
         ctx.set_attribute("user.email", data.get("email", ""))
-        track("user_created", {
-            "user_id": "123",
-            "email": data.get("email", ""),
-        })
+        track(
+            "user_created",
+            {
+                "user_id": "123",
+                "email": data.get("email", ""),
+            },
+        )
         return {"id": "123", "email": data.get("email", "")}
 
     @trace
     async def process_order(ctx, order_id: str, amount: float):
         ctx.set_attribute("order.id", order_id)
         ctx.set_attribute("order.amount", amount)
-        track("order_completed", {
-            "order_id": order_id,
-            "amount": amount,
-            "currency": "USD",
-        })
+        track(
+            "order_completed",
+            {
+                "order_id": order_id,
+                "amount": amount,
+                "currency": "USD",
+            },
+        )
         return {"id": order_id, "amount": amount, "status": "completed"}
 
     async def run_test():
@@ -175,7 +183,9 @@ def test_events_example() -> None:
     assert_no_errors(exporter)
 
     # Check events events were received
-    assert len(events_received) >= 2, f"Expected at least 2 events events, got {len(events_received)}"
+    assert len(events_received) >= 2, (
+        f"Expected at least 2 events events, got {len(events_received)}"
+    )
     event_names = [e[0] for e in events_received]
     assert "user_created" in event_names, "user_created event not found"
     assert "order_completed" in event_names, "order_completed event not found"
@@ -203,10 +213,13 @@ def test_complete_example() -> None:
             await asyncio.sleep(0.01)  # Simulate DB call
             user = {"id": data.get("id", "123"), "email": data.get("email", "")}
 
-        track("user_created", {
-            "user_id": user["id"],
-            "email": user["email"],
-        })
+        track(
+            "user_created",
+            {
+                "user_id": user["id"],
+                "email": user["email"],
+            },
+        )
         return user
 
     @trace
@@ -222,10 +235,13 @@ def test_complete_example() -> None:
             inventory_ctx.set_attribute("inventory.action", "deduct")
             await asyncio.sleep(0.01)
 
-        track("order_completed", {
-            "order_id": order_id,
-            "amount": amount,
-        })
+        track(
+            "order_completed",
+            {
+                "order_id": order_id,
+                "amount": amount,
+            },
+        )
         return {"order_id": order_id, "status": "completed"}
 
     async def run_test():
@@ -268,6 +284,7 @@ def test_shutdown_example() -> None:
             await process_data({"index": i})
         await asyncio.sleep(0.2)  # Give events time
         from autotel import shutdown
+
         await shutdown(timeout=1.0)
         return True
 
@@ -448,6 +465,7 @@ def main() -> None:
         except Exception as e:
             print(f"❌ {test.__name__} failed: {e}")
             import traceback
+
             traceback.print_exc()
             failed += 1
             print()
@@ -462,5 +480,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-

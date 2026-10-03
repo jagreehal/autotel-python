@@ -33,7 +33,7 @@ with tracer.start_as_current_span(
         "attr1": value1,
         "attr2": value2,
         # ... more attributes
-    }
+    },
 ) as span:
     # Business logic
     span.set_attribute("result", ...)

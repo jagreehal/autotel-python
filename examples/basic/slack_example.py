@@ -56,10 +56,13 @@ async def create_user(ctx, data: dict[str, Any]) -> None:
     ctx.set_attribute("user.email", user["email"])
 
     # Track events event (will be sent to Slack)
-    track("user_created", {
-        "user_id": user["id"],
-        "email": user["email"],
-    })
+    track(
+        "user_created",
+        {
+            "user_id": user["id"],
+            "email": user["email"],
+        },
+    )
 
     return user
 
@@ -74,11 +77,14 @@ async def process_order(ctx, order_id: str, amount: float) -> None:
     ctx.set_attribute("order.amount", amount)
 
     # Track events event (will be sent to Slack)
-    track("order_completed", {
-        "order_id": order_id,
-        "amount": amount,
-        "currency": "USD",
-    })
+    track(
+        "order_completed",
+        {
+            "order_id": order_id,
+            "amount": amount,
+            "currency": "USD",
+        },
+    )
 
     return order
 

@@ -342,9 +342,7 @@ def _sqs_consumer_attributes(_ctx: Any, msg: Any) -> dict[str, Any]:
     attrs_dict = getattr(msg, "attributes", None) or getattr(msg, "Attributes", None)
     if attrs_dict:
         if "ApproximateReceiveCount" in attrs_dict:
-            attrs["aws.sqs.approximate_receive_count"] = int(
-                attrs_dict["ApproximateReceiveCount"]
-            )
+            attrs["aws.sqs.approximate_receive_count"] = int(attrs_dict["ApproximateReceiveCount"])
         if "SentTimestamp" in attrs_dict:
             attrs["aws.sqs.sent_timestamp"] = int(attrs_dict["SentTimestamp"])
 
@@ -544,14 +542,10 @@ def b3_context_extractor(headers: dict[str, str]) -> SpanContext | None:
 
     # Fall back to multi-header format
     trace_id_val = (
-        headers.get("x-b3-traceid")
-        or headers.get("X-B3-TraceId")
-        or headers.get("X-B3-Traceid")
+        headers.get("x-b3-traceid") or headers.get("X-B3-TraceId") or headers.get("X-B3-Traceid")
     )
     span_id_val = (
-        headers.get("x-b3-spanid")
-        or headers.get("X-B3-SpanId")
-        or headers.get("X-B3-Spanid")
+        headers.get("x-b3-spanid") or headers.get("X-B3-SpanId") or headers.get("X-B3-Spanid")
     )
     sampled_header = (
         headers.get("x-b3-sampled")
@@ -732,12 +726,14 @@ def create_multi_format_extractor(
 
 
 # Default multi-format extractor
-default_multi_format_extractor = create_multi_format_extractor([
-    datadog_context_extractor,
-    b3_context_extractor,
-    xray_context_extractor,
-    jaeger_context_extractor,
-])
+default_multi_format_extractor = create_multi_format_extractor(
+    [
+        datadog_context_extractor,
+        b3_context_extractor,
+        xray_context_extractor,
+        jaeger_context_extractor,
+    ]
+)
 """Pre-built extractor that handles Datadog, B3, X-Ray, and Jaeger formats.
 
 Example:

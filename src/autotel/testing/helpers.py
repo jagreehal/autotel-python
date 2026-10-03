@@ -62,9 +62,9 @@ def assert_trace_failed(exporter: InMemorySpanExporter, span_name: str) -> None:
         raise AssertionError(f"Span '{span_name}' not found")
 
     for span in matching_spans:
-        assert (
-            span.status.status_code == StatusCode.ERROR
-        ), f"Span '{span_name}' is not in error state"
+        assert span.status.status_code == StatusCode.ERROR, (
+            f"Span '{span_name}' is not in error state"
+        )
 
 
 def assert_no_errors(exporter: InMemorySpanExporter) -> None:
@@ -130,9 +130,9 @@ def assert_trace_duration(
     if duration_ms is None:
         raise AssertionError(f"Span '{span_name}' not found")
 
-    assert (
-        duration_ms <= max_duration_ms
-    ), f"Span '{span_name}' duration {duration_ms:.2f}ms exceeds maximum {max_duration_ms}ms"
+    assert duration_ms <= max_duration_ms, (
+        f"Span '{span_name}' duration {duration_ms:.2f}ms exceeds maximum {max_duration_ms}ms"
+    )
 
 
 def get_span_attribute(

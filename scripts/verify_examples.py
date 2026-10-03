@@ -12,7 +12,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 def check_syntax(file_path) -> None:
     """Check if a Python file has valid syntax."""
     try:
-        with open(file_path, encoding='utf-8') as f:
+        with open(file_path, encoding="utf-8") as f:
             source = f.read()
         ast.parse(source, filename=str(file_path))
         return True, None
@@ -20,6 +20,7 @@ def check_syntax(file_path) -> None:
         return False, f"Syntax error: {e}"
     except Exception as e:
         return False, f"Error: {e}"
+
 
 def verify_examples() -> None:
     """Verify all example files."""
@@ -59,6 +60,7 @@ def verify_examples() -> None:
 
     return all_passed
 
+
 def verify_imports() -> None:
     """Verify that imports in examples reference correct modules."""
     examples_dir = PROJECT_ROOT / "examples"
@@ -74,7 +76,7 @@ def verify_imports() -> None:
             continue
 
         try:
-            with open(example_file, encoding='utf-8') as f:
+            with open(example_file, encoding="utf-8") as f:
                 content = f.read()
                 if "events_adapters" in content:
                     old_imports_found.append(str(example_file.relative_to(PROJECT_ROOT)))
@@ -91,6 +93,7 @@ def verify_imports() -> None:
         print("✅ All import paths are correct (using subscribers)")
         return True
 
+
 if __name__ == "__main__":
     syntax_ok = verify_examples()
     imports_ok = verify_imports()
@@ -101,5 +104,3 @@ if __name__ == "__main__":
     else:
         print("\n❌ Some verifications failed")
         sys.exit(1)
-
-

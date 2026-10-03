@@ -35,10 +35,13 @@ async def create_user(ctx, data: dict[str, Any]) -> None:
         user = {"id": data.get("id", "123"), "email": data.get("email", "")}
 
     # Track events event (auto-enriched with trace context)
-    track("user_created", {
-        "user_id": user["id"],
-        "email": user["email"],
-    })
+    track(
+        "user_created",
+        {
+            "user_id": user["id"],
+            "email": user["email"],
+        },
+    )
 
     return user
 
@@ -60,10 +63,13 @@ async def process_order(ctx, order_id: str, amount: float) -> None:
         await asyncio.sleep(0.03)
 
     # Track events
-    track("order_completed", {
-        "order_id": order_id,
-        "amount": amount,
-    })
+    track(
+        "order_completed",
+        {
+            "order_id": order_id,
+            "amount": amount,
+        },
+    )
 
     return {"order_id": order_id, "status": "completed"}
 

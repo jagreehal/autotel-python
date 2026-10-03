@@ -19,6 +19,7 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 # ==================== BOILERPLATE START (135 lines!) ====================
 
+
 def extract_otel_context_from_meta(meta: dict | None) -> Context:
     """
     Extract OpenTelemetry context from MCP _meta field.
@@ -127,6 +128,7 @@ class TracedMCPServer:
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._server, name)
+
 
 # ==================== BOILERPLATE END ====================
 

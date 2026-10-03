@@ -246,9 +246,7 @@ def test_inject_trace_headers_with_existing(exporter: Any) -> None:
 def test_extract_trace_context() -> None:
     """Test extract_trace_context helper."""
     # Create headers with valid traceparent
-    headers = {
-        "traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
-    }
+    headers = {"traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"}
     ctx = extract_trace_context(headers)
     # Context should be returned (even if not valid, it shouldn't error)
     assert ctx is not None

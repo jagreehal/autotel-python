@@ -29,15 +29,19 @@ def create_user(ctx, data) -> None:
     ctx.set_attribute("user.id", data.get("id", ""))
     return {"id": data.get("id"), "email": data.get("email")}
 
+
 def update_user(ctx, user_id, data) -> None:
     ctx.set_attribute("user.id", user_id)
     return {"id": user_id, **data}
 
-user_service = instrument({
-    "create": create_user,
-    "get": lambda user_id: {"id": user_id, "name": "John Doe"},
-    "update": update_user,
-})
+
+user_service = instrument(
+    {
+        "create": create_user,
+        "get": lambda user_id: {"id": user_id, "name": "John Doe"},
+        "update": update_user,
+    }
+)
 
 
 # Pattern 3: Manual span creation

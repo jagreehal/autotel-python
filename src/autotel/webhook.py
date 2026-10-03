@@ -541,9 +541,7 @@ class ParkingLot:
                         loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(loop)
 
-                    parked_context = loop.run_until_complete(
-                        parking_lot.retrieve(correlation_key)
-                    )
+                    parked_context = loop.run_until_complete(parking_lot.retrieve(correlation_key))
                     elapsed_ms = _elapsed(parked_context)
 
                     tracer = otel_trace.get_tracer(__name__)

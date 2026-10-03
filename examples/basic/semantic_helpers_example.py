@@ -107,12 +107,7 @@ async def get_user_by_id(ctx, user_id: str) -> None:
     return {"id": user_id, "name": "John Doe", "email": "john@example.com"}
 
 
-@trace_db(
-    system="mongodb",
-    operation="find",
-    db_name="app_db",
-    collection="orders"
-)
+@trace_db(system="mongodb", operation="find", db_name="app_db", collection="orders")
 async def find_user_orders(ctx, user_id: str) -> None:
     """
     Example MongoDB query.
@@ -203,11 +198,7 @@ async def create_stripe_charge(ctx, amount: int, currency: str) -> None:
 # ============================================================================
 
 
-@trace_messaging(
-    system="kafka",
-    operation="publish",
-    destination="order-events"
-)
+@trace_messaging(system="kafka", operation="publish", destination="order-events")
 async def publish_order_event(ctx, order_id: str, event_type: str, data: dict[str, Any]) -> None:
     """
     Example Kafka publish operation.
@@ -228,11 +219,7 @@ async def publish_order_event(ctx, order_id: str, event_type: str, data: dict[st
     return {"offset": 12345, "partition": 2}
 
 
-@trace_messaging(
-    system="rabbitmq",
-    operation="receive",
-    destination="notifications"
-)
+@trace_messaging(system="rabbitmq", operation="receive", destination="notifications")
 async def consume_notification(ctx, message_id: str) -> None:
     """
     Example RabbitMQ receive operation.
@@ -252,11 +239,7 @@ async def consume_notification(ctx, message_id: str) -> None:
     return {"processed": True}
 
 
-@trace_messaging(
-    system="sqs",
-    operation="process",
-    destination="task-queue"
-)
+@trace_messaging(system="sqs", operation="process", destination="task-queue")
 async def process_task(ctx, task_id: str, task_data: dict[str, Any]) -> None:
     """
     Example SQS message processing.
@@ -308,9 +291,7 @@ async def process_user_request(ctx, user_id: str, prompt: str) -> None:
 
     # 4. Publish event
     await publish_order_event(
-        "evt_123",
-        "ai_completion",
-        {"user_id": user_id, "prompt_length": len(prompt)}
+        "evt_123", "ai_completion", {"user_id": user_id, "prompt_length": len(prompt)}
     )
 
     return response
@@ -358,11 +339,7 @@ async def main() -> None:
 
     # Messaging Operations
     print("📨 Messaging Operations:")
-    kafka_result = await publish_order_event(
-        "order_456",
-        "order.created",
-        {"total": 99.99}
-    )
+    kafka_result = await publish_order_event("order_456", "order.created", {"total": 99.99})
     print(f"  ✓ Kafka publish: offset {kafka_result['offset']}")
 
     notification = await consume_notification("msg_789")

@@ -117,12 +117,14 @@ def test_trace_context_array_attributes(exporter: Any) -> None:
 def test_trace_context_set_attributes_batch(exporter: Any) -> None:
     """Test setting multiple attributes at once."""
     with span("test.operation") as ctx:
-        ctx.set_attributes({
-            "user.id": "user_123",
-            "user.tier": "premium",
-            "request.count": 42,
-            "tags": ["qa", "test"],
-        })
+        ctx.set_attributes(
+            {
+                "user.id": "user_123",
+                "user.tier": "premium",
+                "request.count": 42,
+                "tags": ["qa", "test"],
+            }
+        )
 
     spans = exporter.get_finished_spans()
     assert len(spans) == 1
@@ -158,10 +160,12 @@ def test_trace_context_mixed_attributes(exporter: Any) -> None:
         ctx.set_attribute("operation.name", "process_batch")
         ctx.set_attribute("batch.size", 100)
         ctx.set_attribute("item.ids", ["id_1", "id_2", "id_3"])
-        ctx.set_attributes({
-            "success.rate": 0.95,
-            "error.codes": [404, 500, 503],
-        })
+        ctx.set_attributes(
+            {
+                "success.rate": 0.95,
+                "error.codes": [404, 500, 503],
+            }
+        )
 
     spans = exporter.get_finished_spans()
     assert len(spans) == 1

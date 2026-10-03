@@ -59,11 +59,14 @@ async def create_user(ctx, data: dict[str, Any]) -> None:
     user = {"id": "user-123", "email": data.get("email", ""), "plan": "premium"}
 
     # Track product event - goes to subscribers (PostHog, Mixpanel, etc.)
-    track("user.signup", {
-        "user_id": user["id"],
-        "email": user["email"],
-        "plan": user["plan"],
-    })
+    track(
+        "user.signup",
+        {
+            "user_id": user["id"],
+            "email": user["email"],
+            "plan": user["plan"],
+        },
+    )
 
     return user
 
@@ -78,12 +81,15 @@ async def process_order(ctx, order_id: str, amount: float) -> None:
     order = {"id": order_id, "amount": amount, "status": "completed"}
 
     # Track product event
-    track("order.completed", {
-        "order_id": order_id,
-        "amount": amount,
-        "currency": "USD",
-        "payment_method": "credit_card",
-    })
+    track(
+        "order.completed",
+        {
+            "order_id": order_id,
+            "amount": amount,
+            "currency": "USD",
+            "payment_method": "credit_card",
+        },
+    )
 
     return order
 
@@ -94,12 +100,15 @@ async def upgrade_subscription(ctx, user_id: str, from_plan: str, to_plan: str) 
     ctx.set_attribute("user.id", user_id)
 
     # Track product event for subscription change
-    track("subscription.upgraded", {
-        "user_id": user_id,
-        "from_plan": from_plan,
-        "to_plan": to_plan,
-        "revenue_delta": 20.0,  # Additional revenue
-    })
+    track(
+        "subscription.upgraded",
+        {
+            "user_id": user_id,
+            "from_plan": from_plan,
+            "to_plan": to_plan,
+            "revenue_delta": 20.0,  # Additional revenue
+        },
+    )
 
     return {"user_id": user_id, "plan": to_plan}
 

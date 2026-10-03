@@ -197,20 +197,24 @@ class TestDefineBusinessBaggage:
 
     def test_basic_schema(self) -> None:
         """Test basic schema definition."""
-        bc = define_business_baggage({
-            "tenant_id": {"type": "string"},
-            "correlation_id": {"type": "string"},
-        })
+        bc = define_business_baggage(
+            {
+                "tenant_id": {"type": "string"},
+                "correlation_id": {"type": "string"},
+            }
+        )
 
         ctx = bc.set(None, "tenant_id", "acme")
         assert bc.get(ctx, "tenant_id") == "acme"
 
     def test_pii_flag(self) -> None:
         """Test PII flag causes hashing."""
-        bc = define_business_baggage({
-            "user_id": {"type": "string", "pii": True},
-            "tenant_id": {"type": "string"},
-        })
+        bc = define_business_baggage(
+            {
+                "user_id": {"type": "string", "pii": True},
+                "tenant_id": {"type": "string"},
+            }
+        )
 
         ctx = bc.set(None, "user_id", "user@example.com")
         ctx = bc.set(ctx, "tenant_id", "acme")
@@ -225,10 +229,12 @@ class TestDefineBusinessBaggage:
 
     def test_propagate_false_excludes_key(self) -> None:
         """Test propagate: false excludes key from allowlist."""
-        bc = define_business_baggage({
-            "allowed": {"type": "string", "propagate": True},
-            "not_allowed": {"type": "string", "propagate": False},
-        })
+        bc = define_business_baggage(
+            {
+                "allowed": {"type": "string", "propagate": True},
+                "not_allowed": {"type": "string", "propagate": False},
+            }
+        )
 
         ctx = bc.set(None, "allowed", "yes")
 
@@ -254,6 +260,7 @@ class TestGlobalConfiguration:
         """Test get_business_baggage creates default if not configured."""
         # Reset global state by importing fresh
         import autotel.business_baggage as bb
+
         bb._default_baggage = None
 
         bc = get_business_baggage()
