@@ -16,6 +16,7 @@ uv add autotel
 
 ```python
 from autotel import init
+
 init(service="my-service", endpoint="http://localhost:4318")
 ```
 
@@ -24,9 +25,10 @@ init(service="my-service", endpoint="http://localhost:4318")
 ```python
 from autotel import trace
 
+
 @trace
 async def create_user(ctx, data):
-    ctx.set_attribute('user.id', data['id'])
+    ctx.set_attribute("user.id", data["id"])
     return await db.users.create(data)
 ```
 

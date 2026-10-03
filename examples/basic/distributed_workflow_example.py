@@ -29,6 +29,7 @@ init(
 
 # --- "Order service" ---
 
+
 @trace_distributed_workflow(
     name="OrderFulfillment",
     workflow_id_from=lambda order: order["id"],
@@ -46,6 +47,7 @@ async def create_order(ctx: Any, order: dict) -> dict:
 
 
 # --- "Inventory service" (same process for demo; normally another service) ---
+
 
 @trace_distributed_step(name="ReserveInventory", idempotent=True)
 async def reserve_inventory(ctx: Any, request: dict) -> str:

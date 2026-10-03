@@ -1,6 +1,5 @@
 """Tests for messaging adapters and context extractors."""
 
-
 from opentelemetry.trace import SpanContext, TraceFlags
 
 from autotel.messaging_adapters import (
@@ -24,6 +23,7 @@ from autotel.messaging_adapters import (
 
 def test_nats_adapter_producer_attributes() -> None:
     """NATS producer adapter extracts subject, reply_to, stream from message."""
+
     class MockMsg:
         subject = "orders.created"
         reply_to = "reply.inbox"
@@ -38,6 +38,7 @@ def test_nats_adapter_producer_attributes() -> None:
 
 def test_nats_adapter_consumer_headers_from_dict() -> None:
     """NATS consumer headers_from returns dict when message has headers dict."""
+
     class MockMsg:
         headers = {"traceparent": "00-abc-123-01", "tracestate": "a=b"}
 
@@ -47,6 +48,7 @@ def test_nats_adapter_consumer_headers_from_dict() -> None:
 
 def test_nats_adapter_consumer_attributes() -> None:
     """NATS consumer adapter extracts subject, stream, consumer from message."""
+
     class MockInfo:
         stream = "ORDERS"
         consumer = "consumer-1"
@@ -71,6 +73,7 @@ def test_nats_adapter_consumer_attributes() -> None:
 
 def test_temporal_adapter_producer_attributes() -> None:
     """Temporal producer adapter extracts workflow_id, run_id, task_queue."""
+
     class MockInfo:
         workflow_id = "wf-123"
         run_id = "run-456"
@@ -86,6 +89,7 @@ def test_temporal_adapter_producer_attributes() -> None:
 
 def test_temporal_adapter_consumer_attributes() -> None:
     """Temporal consumer adapter extracts activity info."""
+
     class MockMsg:
         workflow_id = "wf-1"
         run_id = "run-1"
@@ -106,6 +110,7 @@ def test_temporal_adapter_consumer_attributes() -> None:
 
 def test_cloudflare_queues_adapter_consumer_attributes() -> None:
     """Cloudflare Queues consumer extracts message id, timestamp, attempts."""
+
     class MockTimestamp:
         def timestamp(self) -> float:
             return 1600000000.0
@@ -128,12 +133,16 @@ def test_cloudflare_queues_adapter_consumer_attributes() -> None:
 
 def test_sqs_adapter_consumer_headers_from_message_attributes() -> None:
     """SQS consumer headers_from extracts trace context from message attributes."""
-    msg = type("Msg", (), {
-        "message_attributes": {
-            "traceparent": {"StringValue": "00-abc-def-01"},
-            "tracestate": {"StringValue": "a=b"},
-        }
-    })()
+    msg = type(
+        "Msg",
+        (),
+        {
+            "message_attributes": {
+                "traceparent": {"StringValue": "00-abc-def-01"},
+                "tracestate": {"StringValue": "a=b"},
+            }
+        },
+    )()
     headers = sqs_adapter.consumer.headers_from(msg)
     assert headers is not None
     assert "traceparent" in str(headers).lower() or "00-abc" in str(headers)
@@ -141,6 +150,7 @@ def test_sqs_adapter_consumer_headers_from_message_attributes() -> None:
 
 def test_sqs_adapter_consumer_attributes() -> None:
     """SQS consumer adapter extracts message_id, receipt_handle prefix, receive count."""
+
     class MockMsg:
         message_id = "msg-123"
         receipt_handle = "x" * 50
@@ -157,6 +167,7 @@ def test_sqs_adapter_consumer_attributes() -> None:
 
 def test_redis_streams_adapter_consumer_headers() -> None:
     """Redis consumer headers_from extracts from tuple (message_id, data) with metadata."""
+
     # Simulate Redis stream message: (message_id, {b"data": b"payload", b"traceparent": b"..."})
     class MockMsg:
         pass
@@ -258,10 +269,12 @@ def test_jaeger_context_extractor_missing_returns_none() -> None:
 
 def test_create_multi_format_extractor() -> None:
     """create_multi_format_extractor tries extractors in order."""
-    extractor = create_multi_format_extractor([
-        lambda h: None,
-        datadog_context_extractor,
-    ])
+    extractor = create_multi_format_extractor(
+        [
+            lambda h: None,
+            datadog_context_extractor,
+        ]
+    )
     headers = {
         "x-datadog-trace-id": "111",
         "x-datadog-parent-id": "222",
@@ -273,10 +286,14 @@ def test_create_multi_format_extractor() -> None:
 
 def test_create_multi_format_extractor_returns_first_success() -> None:
     """create_multi_format_extractor returns first non-None result."""
-    extractor = create_multi_format_extractor([
-        lambda h: SpanContext(trace_id=1, span_id=2, is_remote=True, trace_flags=TraceFlags.SAMPLED),
-        datadog_context_extractor,
-    ])
+    extractor = create_multi_format_extractor(
+        [
+            lambda h: SpanContext(
+                trace_id=1, span_id=2, is_remote=True, trace_flags=TraceFlags.SAMPLED
+            ),
+            datadog_context_extractor,
+        ]
+    )
     # First one returns, so we get trace_id=1
     ctx = extractor({"x-datadog-trace-id": "999", "x-datadog-parent-id": "888"})
     assert ctx is not None

@@ -22,7 +22,7 @@ uv add autotel
 ```python
 from autotel import init
 
-init(service='checkout-api')
+init(service="checkout-api")
 ```
 
 **Configuration options:**
@@ -35,9 +35,10 @@ init(service='checkout-api')
 ```python
 from autotel import trace
 
+
 @trace
 async def create_user(ctx, data: dict):
-    ctx.set_attribute('user.email', data['email'])
+    ctx.set_attribute("user.email", data["email"])
     user = await db.users.create(data)
     return user
 ```
@@ -54,14 +55,12 @@ import os
 from autotel import init, track
 from autotel.subscribers import PostHogSubscriber
 
-init(
-    service='checkout-api',
-    subscribers=[PostHogSubscriber(api_key=os.environ["POSTHOG_KEY"])]
-)
+init(service="checkout-api", subscribers=[PostHogSubscriber(api_key=os.environ["POSTHOG_KEY"])])
+
 
 @trace
 async def process_order(ctx, order):
-    track('order.completed', {'amount': order.total})
+    track("order.completed", {"amount": order.total})
     return await charge(order)
 ```
 
@@ -72,7 +71,7 @@ Every span, metric, log, and event includes `traceId`, `spanId`, `operation.name
 The happy path is genuinely one line:
 
 ```python
-init(service="checkout-api")                       # reads OTEL_* env vars
+init(service="checkout-api")  # reads OTEL_* env vars
 init(service="checkout-api", endpoint="https://otlp.example.com")
 ```
 
@@ -116,10 +115,12 @@ from opentelemetry.sdk.metrics import MeterProvider
 # ... 15+ more imports
 
 # Manual resource setup
-resource = Resource.create({
-    "service.name": "my-service",
-    "deployment.environment": "production",
-})
+resource = Resource.create(
+    {
+        "service.name": "my-service",
+        "deployment.environment": "production",
+    }
+)
 
 # Manual tracer setup
 trace_provider = TracerProvider(resource=resource)
@@ -140,6 +141,7 @@ request_counter = meter.create_counter("http.requests")
 latency_histogram = meter.create_histogram("http.duration")
 # ... more setup
 
+
 @app.route("/api/orders", methods=["POST"])
 def create_order():
     started = time.perf_counter()
@@ -150,7 +152,7 @@ def create_order():
         attributes={
             "http.method": "POST",
             "http.route": "/api/orders",
-        }
+        },
     ) as span:
         data = request.get_json()
 
@@ -160,8 +162,7 @@ def create_order():
 
         # Nested span for database call
         with tracer.start_as_current_span(
-            "db.insert",
-            attributes={"db.system": "postgresql"}
+            "db.insert", attributes={"db.system": "postgresql"}
         ) as db_span:
             order = db.orders.create(data)
             db_span.set_attribute("db.statement", "INSERT INTO orders")
@@ -223,8 +224,10 @@ def with_otel_context_from_meta(func):
             return await func(*args, **kwargs)
         finally:
             context.detach(token)
+
     # ... handle sync functions too
     return wrapper
+
 
 # Custom wrapper class to inject context (35 lines)
 class TracedMCPServer:
@@ -234,13 +237,16 @@ class TracedMCPServer:
     async def call_tool(self, tool_name: str, arguments: dict):
         arguments["_meta"] = inject_otel_context_to_meta()
         return await self._server.call_tool(tool_name, arguments)
+
     # ... more plumbing
+
 
 # Usage - still requires manual work!
 @with_otel_context_from_meta  # Must decorate every tool
 async def my_mcp_tool(query: str, _meta: dict = None):
     # Finally, your business logic
     return process(query)
+
 
 traced_server = TracedMCPServer(server)  # Must wrap every server
 ```
@@ -344,6 +350,7 @@ def process_batch(batch):
 ```python
 from autotel import span
 
+
 async def complex_operation():
     with span("database.query") as ctx:
         ctx.set_attribute("query.type", "SELECT")
@@ -369,16 +376,19 @@ from autotel import (
     get_baggage,
 )
 
+
 def process_order(order_data):
     # Set single attribute
     set_attribute("order.type", "express")
 
     # Set multiple attributes at once
-    set_attributes({
-        "order.id": order_data["id"],
-        "order.total": order_data["total"],
-        "customer.tier": "premium",
-    })
+    set_attributes(
+        {
+            "order.id": order_data["id"],
+            "order.total": order_data["total"],
+            "customer.tier": "premium",
+        }
+    )
 
     # Add a span event
     add_event("order.validated", {"validator": "schema_v2"})
@@ -393,6 +403,7 @@ def process_order(order_data):
         # Record exception automatically (sets span status to ERROR)
         record_exception(e, {"order.id": order_data["id"]})
         raise
+
 
 # Read baggage without needing TraceContext
 tenant_id = get_baggage("tenant.id")
@@ -420,11 +431,11 @@ Automatically adds Gen AI semantic conventions for LLM operations:
 ```python
 from autotel import trace_llm
 
+
 @trace_llm(model="gpt-4-turbo", operation="chat", system="openai")
 async def generate_response(ctx, prompt: str):
     response = await openai.chat.completions.create(
-        model="gpt-4-turbo",
-        messages=[{"role": "user", "content": prompt}]
+        model="gpt-4-turbo", messages=[{"role": "user", "content": prompt}]
     )
 
     # Add token usage metrics
@@ -452,6 +463,7 @@ Automatically adds DB semantic conventions for database operations:
 ```python
 from autotel import trace_db
 
+
 @trace_db(system="postgresql", operation="SELECT", db_name="production")
 async def get_user_by_id(ctx, user_id: str):
     result = await conn.fetchrow("SELECT * FROM users WHERE id = $1", user_id)
@@ -462,9 +474,11 @@ async def get_user_by_id(ctx, user_id: str):
 
     return result
 
+
 @trace_db(system="mongodb", operation="find", db_name="app_db", collection="orders")
 async def find_user_orders(ctx, user_id: str):
     return await db.orders.find({"user_id": user_id}).to_list()
+
 
 @trace_db(system="redis", operation="get")
 async def get_from_cache(ctx, key: str):
@@ -485,6 +499,7 @@ Automatically adds HTTP semantic conventions for API calls:
 ```python
 from autotel import trace_http
 
+
 @trace_http(method="GET", url="https://api.github.com/users/{username}")
 async def get_github_user(ctx, username: str):
     async with httpx.AsyncClient() as client:
@@ -495,6 +510,7 @@ async def get_github_user(ctx, username: str):
         ctx.set_attribute("http.response.body.size", len(response.content))
 
         return response.json()
+
 
 @trace_http(method="POST", url="https://api.stripe.com/v1/charges")
 async def create_charge(ctx, amount: int):
@@ -513,9 +529,10 @@ Automatically adds messaging semantic conventions for message queues:
 ```python
 from autotel import trace_messaging
 
+
 @trace_messaging(system="kafka", operation="publish", destination="order-events")
 async def publish_order_event(ctx, order_id: str, event_data: dict):
-    producer.send('order-events', value=event_data)
+    producer.send("order-events", value=event_data)
 
     # Add message details
     ctx.set_attribute("messaging.message.id", order_id)
@@ -523,10 +540,12 @@ async def publish_order_event(ctx, order_id: str, event_data: dict):
 
     producer.flush()
 
+
 @trace_messaging(system="rabbitmq", operation="receive", destination="notifications")
 async def consume_notification(ctx, message):
     ctx.set_attribute("messaging.message.id", message.message_id)
     await process_notification(message.body)
+
 
 @trace_messaging(system="sqs", operation="process", destination="tasks")
 async def process_task(ctx, task_id: str, task_data: dict):
@@ -565,12 +584,14 @@ parking_lot = create_parking_lot(
     default_ttl_seconds=86400,  # 24 hours
 )
 
+
 # When initiating payment
 @trace
 async def initiate_payment(ctx, order_id: str):
     # Park the current trace context
     await parking_lot.park(f"payment:{order_id}", metadata={"order_id": order_id})
     await stripe_client.create_payment_intent(metadata={"order_id": order_id})
+
 
 # When Stripe webhook arrives (hours later)
 @parking_lot.trace_callback(
@@ -598,6 +619,7 @@ Track workflows spanning multiple microservices by propagating workflow identity
 # Service A: Order Service
 from autotel import trace_distributed_workflow, trace_producer
 
+
 @trace_distributed_workflow(
     name="OrderFulfillment",
     workflow_id_from=lambda order: order["id"],
@@ -608,13 +630,16 @@ async def create_order(ctx, order: dict):
     print(f"Started workflow {ctx.workflow_id}")
     await publish_to_inventory(order)
 
+
 @trace_producer(system="kafka", destination="inventory-requests")
 async def publish_to_inventory(ctx, order):
     headers = ctx.inject_headers()  # Includes workflow.* baggage
     await producer.send(topic="inventory-requests", value=order, headers=headers)
 
+
 # Service B: Inventory Service
 from autotel import trace_distributed_step
+
 
 @trace_distributed_step(name="ReserveInventory")
 async def process_inventory(ctx, message):
@@ -639,6 +664,7 @@ Pre-built adapters for common messaging systems with system-specific attributes:
 from autotel import trace_consumer
 from autotel.messaging_adapters import nats_adapter, temporal_adapter
 
+
 # NATS JetStream
 @trace_consumer(
     system="nats",
@@ -649,6 +675,7 @@ from autotel.messaging_adapters import nats_adapter, temporal_adapter
 async def process_nats_message(ctx, msg):
     # Automatic attributes: messaging.nats.subject, messaging.nats.stream
     await handle_order(msg.data)
+
 
 # Temporal Workflow
 @trace_consumer(
@@ -682,6 +709,7 @@ from autotel.messaging_adapters import (
     default_multi_format_extractor,
 )
 
+
 # Single format (Datadog)
 @trace_consumer(
     system="kafka",
@@ -691,6 +719,7 @@ from autotel.messaging_adapters import (
 async def process_datadog_message(ctx, msg):
     # Parent span from x-datadog-trace-id/x-datadog-parent-id headers
     pass
+
 
 # Multi-format (try W3C, then Datadog, then B3)
 @trace_consumer(
@@ -718,11 +747,13 @@ async def process_any_message(ctx, msg):
 ```python
 from autotel import trace_producer, trace_consumer, DLQOptions, OrderingConfig
 
+
 # Producer with automatic header injection
 @trace_producer(system="kafka", destination="orders")
 async def publish_order(ctx, order: dict):
     headers = ctx.inject_headers()  # W3C traceparent + baggage
     await producer.send("orders", value=order, headers=headers)
+
 
 # Consumer with DLQ and retry helpers
 @trace_consumer(
@@ -772,19 +803,22 @@ async def process_order(ctx, message: dict):
 from autotel import instrument
 
 # Instrument multiple functions at once
-user_service = instrument({
-    'create': lambda ctx, data: db.users.create(data),
-    'get': lambda user_id: db.users.find(user_id),
-    'update': lambda ctx, user_id, data: db.users.update(user_id, data),
-})
+user_service = instrument(
+    {
+        "create": lambda ctx, data: db.users.create(data),
+        "get": lambda user_id: db.users.find(user_id),
+        "update": lambda ctx, user_id, data: db.users.update(user_id, data),
+    }
+)
 
-user = user_service['create']({'id': '123', 'email': 'test@example.com'})
+user = user_service["create"]({"id": "123", "email": "test@example.com"})
 ```
 
 ### Root context isolation
 
 ```python
 from autotel import with_new_context
+
 
 def background_worker():
     with with_new_context():
@@ -802,21 +836,24 @@ Baggage allows you to propagate custom key-value pairs across distributed traces
 from autotel import trace, with_baggage
 from autotel.http import inject_trace_context
 
+
 @trace
 async def create_order(ctx, order):
     # Set baggage for downstream services
-    with with_baggage({
-        'tenant.id': order.tenant_id,
-        'user.id': order.user_id,
-    }):
+    with with_baggage(
+        {
+            "tenant.id": order.tenant_id,
+            "user.id": order.user_id,
+        }
+    ):
         # Baggage is available to all child spans and HTTP calls
-        tenant_id = ctx.get_baggage('tenant.id')
-        ctx.set_attribute('tenant.id', tenant_id or 'unknown')
-        
+        tenant_id = ctx.get_baggage("tenant.id")
+        ctx.set_attribute("tenant.id", tenant_id or "unknown")
+
         # HTTP headers automatically include baggage
         headers = inject_trace_context()
         async with httpx.AsyncClient() as client:
-            await client.post('/api/charge', headers=headers, json=order)
+            await client.post("/api/charge", headers=headers, json=order)
 ```
 
 **TraceContext baggage methods:**
@@ -825,14 +862,14 @@ async def create_order(ctx, order):
 @trace
 async def process_order(ctx, order):
     # Get baggage entry
-    tenant_id = ctx.get_baggage('tenant.id')
-    
+    tenant_id = ctx.get_baggage("tenant.id")
+
     # Set baggage entry (note: use with_baggage() for proper scoping)
-    ctx.set_baggage('order.id', order.id)
-    
+    ctx.set_baggage("order.id", order.id)
+
     # Delete baggage entry
-    ctx.delete_baggage('old.key')
-    
+    ctx.delete_baggage("old.key")
+
     # Get all baggage entries
     all_baggage = ctx.get_all_baggage()
     # Returns: {'tenant.id': 't1', 'user.id': 'u1', ...}
@@ -847,25 +884,25 @@ from autotel import init, trace, with_baggage
 
 # Option 1: Default prefix 'baggage.'
 init(
-    service='my-app',
+    service="my-app",
     baggage=True,  # Creates baggage.tenant.id, baggage.user.id
 )
 
 # Option 2: Custom prefix
 init(
-    service='my-app',
-    baggage='ctx',  # Creates ctx.tenant.id, ctx.user.id
+    service="my-app",
+    baggage="ctx",  # Creates ctx.tenant.id, ctx.user.id
 )
 
 # Option 3: No prefix
 init(
-    service='my-app',
-    baggage='',  # Creates tenant.id, user.id (no prefix)
+    service="my-app",
+    baggage="",  # Creates tenant.id, user.id (no prefix)
 )
 
 # Option 4: Disabled (default)
 init(
-    service='my-app',
+    service="my-app",
     baggage=False,  # or omit baggage parameter
     # Baggage won't be copied to span attributes
 )
@@ -874,14 +911,17 @@ init(
 **Example usage:**
 
 ```python
-init(service='my-app', baggage=True)
+init(service="my-app", baggage=True)
+
 
 @trace
 async def process_order(ctx, order):
-    with with_baggage({
-        'tenant.id': order.tenant_id,
-        'user.id': order.user_id,
-    }):
+    with with_baggage(
+        {
+            "tenant.id": order.tenant_id,
+            "user.id": order.user_id,
+        }
+    ):
         # Span automatically has baggage.tenant.id and baggage.user.id attributes!
         # No need for: ctx.set_attribute('tenant.id', ctx.get_baggage('tenant.id'))
         await charge_customer(order)
@@ -901,18 +941,22 @@ async def process_order(ctx, order):
 ```python
 from autotel import Metric
 
-metrics = Metric('checkout')
+metrics = Metric("checkout")
+
 
 @trace
 async def process_order(order):
     # Sends counter to OTLP
-    metrics.trackEvent('order.completed', {
-        'orderId': order.id,
-        'amount': order.total,
-    })
+    metrics.trackEvent(
+        "order.completed",
+        {
+            "orderId": order.id,
+            "amount": order.total,
+        },
+    )
 
     # Sends histogram to OTLP
-    metrics.trackValue('revenue', order.total, {'currency': order.currency})
+    metrics.trackValue("revenue", order.total, {"currency": order.currency})
 ```
 
 - Emits OpenTelemetry counters/histograms via OTLP
@@ -928,15 +972,13 @@ Track user behavior, funnels, and business outcomes alongside your OpenTelemetry
 from autotel import init, track
 from autotel.subscribers import PostHogSubscriber
 
-init(
-    service='checkout',
-    subscribers=[PostHogSubscriber(api_key='phc_...')]
-)
+init(service="checkout", subscribers=[PostHogSubscriber(api_key="phc_...")])
+
 
 @trace
 async def signup(user):
     # All events use subscribers from init() automatically
-    track('user.signup', {'userId': user.id, 'plan': user.plan})
+    track("user.signup", {"userId": user.id, "plan": user.plan})
 ```
 
 **Event instance (inherits subscribers from `init()`):**
@@ -946,7 +988,7 @@ from autotel import Event
 
 # Uses subscribers configured in init()
 events = Event()
-events.trackEvent('order.completed', {'amount': 99.99})
+events.trackEvent("order.completed", {"amount": 99.99})
 ```
 
 **Override subscribers for specific Event instance:**
@@ -956,11 +998,9 @@ from autotel import Event
 from autotel.subscribers import WebhookSubscriber
 
 # Override: use different subscribers (multi-tenant, A/B testing, etc.)
-marketing_events = Event(
-    subscribers=[WebhookSubscriber(url='https://api.example.com/events')]
-)
+marketing_events = Event(subscribers=[WebhookSubscriber(url="https://api.example.com/events")])
 
-marketing_events.trackEvent('campaign.viewed', {'campaignId': '123'})
+marketing_events.trackEvent("campaign.viewed", {"campaignId": "123"})
 ```
 
 **Subscriber resolution:**
@@ -982,14 +1022,15 @@ from autotel import init
 
 logger = logging.getLogger(__name__)
 
-init(service='user-service', logger=logger)
+init(service="user-service", logger=logger)
+
 
 @trace
 async def create_user(data):
-    logger.info('Creating user', extra={'userId': data['id']})
+    logger.info("Creating user", extra={"userId": data["id"]})
     # Log now includes trace_id, span_id, operation_name automatically
     user = await db.users.create(data)
-    logger.info('User created', extra={'userId': user.id})
+    logger.info("User created", extra={"userId": user.id})
     return user
 ```
 
@@ -1001,10 +1042,10 @@ from autotel import init
 
 logger = structlog.get_logger()
 
-init(service='user-service', logger=logger)
+init(service="user-service", logger=logger)
 
 # All logs now include trace context
-logger.info('user.created', user_id='123')
+logger.info("user.created", user_id="123")
 ```
 
 What you get automatically:
@@ -1017,7 +1058,7 @@ What you get automatically:
 Add `logs=True` and autotel exports your log records through the OTLP logs pipeline, each one linked to the active span:
 
 ```python
-init(service='user-service', logger=logger, logs=True)
+init(service="user-service", logger=logger, logs=True)
 ```
 
 Standard logging records go through a handler on the logger you pass (or the root logger). autotel bridges a structlog or loguru logger into the same pipeline, including structlog loggers you bound or cached before `init()`. Calling `init()` again replaces only the handlers autotel installed and leaves your own in place.
@@ -1039,12 +1080,12 @@ app.add_middleware(autotelMiddleware, service="my-api")
 ```python
 # settings.py
 MIDDLEWARE = [
-    'autotel.integrations.django.autotelMiddleware',
+    "autotel.integrations.django.autotelMiddleware",
     # ... other middleware
 ]
 
 autotel = {
-    'SERVICE_NAME': 'my-django-app',
+    "SERVICE_NAME": "my-django-app",
 }
 ```
 
@@ -1083,6 +1124,7 @@ Then just call `init()` with no parameters:
 
 ```python
 from autotel import init
+
 init()  # Reads all config from environment variables!
 ```
 
@@ -1192,11 +1234,11 @@ from autotel import init, AdaptiveSampler
 init(
     service="my-service",
     sampler=AdaptiveSampler(
-        baseline_rate=0.1,      # 10% baseline
-        error_rate=1.0,         # 100% errors
-        slow_threshold_ms=1000, # >1s is slow
-        slow_rate=1.0,          # 100% slow operations
-    )
+        baseline_rate=0.1,  # 10% baseline
+        error_rate=1.0,  # 100% errors
+        slow_threshold_ms=1000,  # >1s is slow
+        slow_rate=1.0,  # 100% slow operations
+    ),
 )
 ```
 
@@ -1214,9 +1256,9 @@ limiter = RateLimiter(max_spans_per_second=1000, burst_size=2000)
 from autotel import CircuitBreaker
 
 breaker = CircuitBreaker(
-    failure_threshold=5,   # Open after 5 failures
-    recovery_timeout=60,   # Retry after 60s
-    success_threshold=2,   # Close after 2 successes
+    failure_threshold=5,  # Open after 5 failures
+    recovery_timeout=60,  # Retry after 60s
+    success_threshold=2,  # Close after 2 successes
 )
 ```
 
@@ -1242,12 +1284,14 @@ safe_value = redactor.redact_attribute("email", "user@example.com")
 ```python
 from autotel.http import http_instrumented, trace_http_request, inject_trace_context
 
+
 # Class decorator for auto-instrumentation
 @http_instrumented(slow_threshold_ms=1000)
 class ApiClient:
     async def get_user(self, user_id: str):
-        res = await httpx.get(f'https://api.example.com/users/{user_id}')
+        res = await httpx.get(f"https://api.example.com/users/{user_id}")
         return res.json()
+
 
 # Manual tracing with W3C Trace Context propagation
 async def fetch_data(url: str):
@@ -1266,8 +1310,8 @@ from autotel.db import instrument_database, trace_db_query
 # Runtime instrumentation
 db = instrument_database(
     SQLAlchemy(...),
-    db_system='postgresql',
-    db_name='myapp',
+    db_system="postgresql",
+    db_name="myapp",
     slow_threshold_ms=500,
 )
 
@@ -1289,6 +1333,7 @@ from autotel.testing import (
     assert_no_errors,
     get_trace_duration,
 )
+
 
 def test_my_function():
     exporter = InMemorySpanExporter()
@@ -1343,6 +1388,7 @@ To export buffered spans and logs at the end of each invocation and keep autotel
 
 ```python
 from autotel import flush
+
 
 def handler(event, context):
     result = process(event)
@@ -1425,6 +1471,7 @@ The `ctx` parameter provides additional methods beyond basic attribute setting:
 from autotel import trace
 from opentelemetry.trace import Link, SpanContext
 
+
 @trace
 async def advanced_operation(ctx, data):
     # Update span name dynamically
@@ -1436,16 +1483,19 @@ async def advanced_operation(ctx, data):
 
     # Set span status explicitly
     from opentelemetry.trace import StatusCode
+
     ctx.set_status(StatusCode.OK, "Operation completed")
 
     # Add links to related spans (for batch processing, fan-out, etc.)
     ctx.add_link(other_span_context, {"relationship": "batch_member"})
 
     # Batch set multiple attributes
-    ctx.set_attributes({
-        "item.count": len(data["items"]),
-        "item.total_size": sum(i["size"] for i in data["items"]),
-    })
+    ctx.set_attributes(
+        {
+            "item.count": len(data["items"]),
+            "item.total_size": sum(i["size"] for i in data["items"]),
+        }
+    )
 
     return result
 ```

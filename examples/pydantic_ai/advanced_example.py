@@ -83,11 +83,14 @@ async def review_code(ctx, code: str) -> CodeReview:
     ctx.add_event("code.review.completed", {"score": result.output.score})
 
     # Track events (auto-enriched with trace context)
-    track("code.reviewed", {
-        "score": result.output.score,
-        "issues_count": len(result.output.issues),
-        "model": "llama3.2",
-    })
+    track(
+        "code.reviewed",
+        {
+            "score": result.output.score,
+            "issues_count": len(result.output.issues),
+            "model": "llama3.2",
+        },
+    )
 
     return result.output
 
@@ -145,17 +148,23 @@ async def analyze_codebase(ctx, code_snippets: list[str]) -> dict:
     # Aggregate results
     avg_score = sum(r.score for r in reviews) / len(reviews) if reviews else 0
     ctx.set_attribute("codebase.avg_score", avg_score)
-    ctx.add_event("codebase.analysis.completed", {
-        "snippets_analyzed": len(code_snippets),
-        "avg_score": avg_score,
-    })
+    ctx.add_event(
+        "codebase.analysis.completed",
+        {
+            "snippets_analyzed": len(code_snippets),
+            "avg_score": avg_score,
+        },
+    )
 
     # Track events (auto-enriched with trace context)
-    track("codebase.analyzed", {
-        "snippets_count": len(code_snippets),
-        "avg_score": avg_score,
-        "model": "llama3.2",
-    })
+    track(
+        "codebase.analyzed",
+        {
+            "snippets_count": len(code_snippets),
+            "avg_score": avg_score,
+            "model": "llama3.2",
+        },
+    )
 
     return {
         "reviews": [r.model_dump() for r in reviews],
@@ -195,6 +204,7 @@ def process_data(data) -> None:
     except Exception as e:
         print(f"   Error: {e}\n")
         import traceback
+
         traceback.print_exc()
 
     print("Check console output above for detailed trace spans!")

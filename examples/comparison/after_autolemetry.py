@@ -18,11 +18,12 @@ autotel.init(
     subscribers=[
         autotel.subscribers.OTLPSubscriber(),
         autotel.subscribers.SlackSubscriber(webhook_url="...") if needed else None,
-    ]
+    ],
 )
 # ==================== THAT'S IT ====================
 
 app = Flask(__name__)
+
 
 @app.route("/ask", methods=["POST"])
 def ask_question() -> None:
@@ -33,10 +34,7 @@ def ask_question() -> None:
     question = data.get("question")
 
     # Add context with simple API instead of manual span.set_attribute() calls
-    autotel.set_attributes({
-        "user.question": question,
-        "request.has_question": bool(question)
-    })
+    autotel.set_attributes({"user.question": question, "request.has_question": bool(question)})
 
     if not question:
         # autotel automatically captures error state, status codes, latency
@@ -50,11 +48,9 @@ def ask_question() -> None:
         answer = f"Mock answer to: {question}"
 
         # Track token usage as an event (auto-enriched with trace context)
-        autotel.track("llm.tokens", {
-            "prompt_tokens": 100,
-            "completion_tokens": 50,
-            "model": "gpt-4"
-        })
+        autotel.track(
+            "llm.tokens", {"prompt_tokens": 100, "completion_tokens": 50, "model": "gpt-4"}
+        )
         # autotel automatically:
         # - Enriches events with trace_id, span_id, operation.name
         # - Sends events to configured subscribers (PostHog, webhooks, etc.)

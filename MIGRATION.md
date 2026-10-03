@@ -82,10 +82,12 @@ from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 
-resource = Resource.create({
-    "service.name": os.getenv("OTEL_SERVICE_NAME", "my-service"),
-    "deployment.environment": os.getenv("ENVIRONMENT", "dev"),
-})
+resource = Resource.create(
+    {
+        "service.name": os.getenv("OTEL_SERVICE_NAME", "my-service"),
+        "deployment.environment": os.getenv("ENVIRONMENT", "dev"),
+    }
+)
 
 trace_provider = TracerProvider(resource=resource)
 span_exporter = OTLPSpanExporter()
@@ -123,6 +125,7 @@ autotel.init(
 ```python
 tracer = trace.get_tracer(__name__)
 
+
 @app.route("/api/users", methods=["POST"])
 def create_user():
     with tracer.start_as_current_span(
@@ -130,7 +133,7 @@ def create_user():
         attributes={
             "http.method": "POST",
             "http.route": "/api/users",
-        }
+        },
     ) as span:
         data = request.get_json()
         span.set_attribute("user.email", data["email"])
@@ -146,6 +149,7 @@ def create_user():
 
 ```python
 # Remove tracer = trace.get_tracer(__name__)
+
 
 @app.route("/api/users", methods=["POST"])
 def create_user():
@@ -187,7 +191,9 @@ def traced_function(func):
                 span.record_exception(e)
                 span.set_status(StatusCode.ERROR)
                 raise
+
     return wrapper
+
 
 @traced_function
 def process_data(data):
@@ -199,9 +205,11 @@ def process_data(data):
 ```python
 from autotel import trace
 
+
 @trace
 def process_data(data):
     return transform(data)
+
 
 # Errors are automatically recorded - no manual exception handling needed!
 ```
@@ -237,6 +245,7 @@ autotel.init(
     instrumentation=["mcp"],  # Context propagation is automatic!
 )
 
+
 # Your tools just work - no decorators or wrappers needed!
 async def my_tool(query: str):
     return process(query)
@@ -250,16 +259,13 @@ async def my_tool(query: str):
 meter = metrics.get_meter(__name__)
 
 request_counter = meter.create_counter(
-    "http.server.request.count",
-    unit="1",
-    description="Total requests"
+    "http.server.request.count", unit="1", description="Total requests"
 )
 
 latency_histogram = meter.create_histogram(
-    "http.server.request.duration",
-    unit="ms",
-    description="Request duration"
+    "http.server.request.duration", unit="ms", description="Request duration"
 )
+
 
 @app.route("/api/orders")
 def get_orders():
@@ -366,6 +372,7 @@ with with_baggage({"user.id": "123", "tenant.id": "456"}):
 import atexit
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
+
 # Manual cleanup
 def cleanup():
     if trace_provider:
@@ -374,6 +381,7 @@ def cleanup():
     if meter_provider:
         meter_provider.force_flush(timeout_millis=5000)
         meter_provider.shutdown()
+
 
 atexit.register(cleanup)
 ```
@@ -458,7 +466,7 @@ span_id = format(span_context.span_id, "016x")
 ```python
 with autotel.span("operation") as ctx:
     trace_id = ctx.trace_id  # Already formatted as hex string
-    span_id = ctx.span_id    # Already formatted as hex string
+    span_id = ctx.span_id  # Already formatted as hex string
 ```
 
 ### Pattern: Conditional Instrumentation
@@ -475,10 +483,7 @@ else:
 **After** (use sampling instead):
 ```python
 # Configure sampling in init()
-autotel.init(
-    service="my-service",
-    sampler=autotel.AdaptiveSampler(baseline_rate=0.1)
-)
+autotel.init(service="my-service", sampler=autotel.AdaptiveSampler(baseline_rate=0.1))
 
 # Just write your code normally
 do_work()
@@ -495,8 +500,7 @@ with tracer.start_as_current_span("llm.chat") as span:
     span.set_attribute("gen.ai.system", "openai")
 
     response = await openai.chat.completions.create(
-        model="gpt-4-turbo",
-        messages=[{"role": "user", "content": prompt}]
+        model="gpt-4-turbo", messages=[{"role": "user", "content": prompt}]
     )
 
     # Manually add token usage
@@ -508,12 +512,12 @@ with tracer.start_as_current_span("llm.chat") as span:
 ```python
 from autotel import trace_llm
 
+
 @trace_llm(model="gpt-4-turbo", operation="chat", system="openai")
 async def generate_response(ctx, prompt: str):
     # Semantic conventions added automatically!
     response = await openai.chat.completions.create(
-        model="gpt-4-turbo",
-        messages=[{"role": "user", "content": prompt}]
+        model="gpt-4-turbo", messages=[{"role": "user", "content": prompt}]
     )
 
     # Just add usage metrics
@@ -542,6 +546,7 @@ with tracer.start_as_current_span("db.query") as span:
 **After** (automatic semantic conventions):
 ```python
 from autotel import trace_db
+
 
 @trace_db(system="postgresql", operation="SELECT", db_name="production")
 async def get_user(ctx, user_id: str):
@@ -578,6 +583,7 @@ with tracer.start_as_current_span("http.request") as span:
 ```python
 from autotel import trace_http
 
+
 @trace_http(method="GET", url="https://api.github.com/users/{username}")
 async def get_github_user(ctx, username: str):
     # HTTP semantic conventions added automatically!
@@ -603,7 +609,7 @@ with tracer.start_as_current_span("kafka.publish") as span:
     span.set_attribute("messaging.message.id", order_id)
     span.set_attribute("messaging.kafka.partition", 2)
 
-    producer.send('order-events', value=event_data)
+    producer.send("order-events", value=event_data)
     producer.flush()
 ```
 
@@ -611,10 +617,11 @@ with tracer.start_as_current_span("kafka.publish") as span:
 ```python
 from autotel import trace_messaging
 
+
 @trace_messaging(system="kafka", operation="publish", destination="order-events")
 async def publish_order_event(ctx, order_id: str, event_data: dict):
     # Messaging semantic conventions added automatically!
-    producer.send('order-events', value=event_data)
+    producer.send("order-events", value=event_data)
 
     # Just add message-specific details
     ctx.set_attribute("messaging.message.id", order_id)
@@ -639,6 +646,7 @@ async def publish_order_event(ctx, order_id: str, event_data: dict):
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor, InMemorySpanExporter
 
+
 def test_tracing():
     exporter = InMemorySpanExporter()
     provider = TracerProvider()
@@ -660,6 +668,7 @@ from autotel import init
 from autotel.exporters import InMemorySpanExporter
 from autotel.processors import SimpleSpanProcessor
 from autotel.testing import assert_trace_created, assert_no_errors
+
 
 def test_tracing():
     exporter = InMemorySpanExporter()
@@ -699,6 +708,7 @@ def test_tracing():
 ```python
 if os.getenv("USE_autotel", "false") == "true":
     import autotel
+
     autotel.init(service="my-service")
 else:
     # Old OTEL setup
@@ -714,6 +724,7 @@ else:
 ```python
 # Run both for comparison
 import autotel
+
 autotel.init(service="my-service")
 
 # Old OTEL still active, sending to different endpoint
@@ -730,7 +741,7 @@ setup_old_otel(endpoint="http://backup-collector:4318")
 ```python
 autotel.init(
     service="my-service",
-    instrumentation=["flask", "requests", "httpx"]  # Add your frameworks
+    instrumentation=["flask", "requests", "httpx"],  # Add your frameworks
 )
 ```
 
@@ -765,7 +776,7 @@ Or enable automatic HTTP instrumentation:
 ```python
 autotel.init(
     service_name="my-service",
-    instrumentation=["requests", "httpx"]  # Auto-injects headers
+    instrumentation=["requests", "httpx"],  # Auto-injects headers
 )
 ```
 
@@ -787,10 +798,7 @@ from autotel.processors import BatchSpanProcessor
 custom_exporter = CustomExporter(...)
 processor = BatchSpanProcessor(custom_exporter)
 
-autotel.init(
-    service="my-service",
-    span_processor=processor
-)
+autotel.init(service="my-service", span_processor=processor)
 ```
 
 ### Issue: Performance degradation
@@ -801,7 +809,7 @@ autotel.init(
 ```python
 autotel.init(
     service="my-service",
-    sampler=autotel.AdaptiveSampler(baseline_rate=0.1)  # 10% baseline
+    sampler=autotel.AdaptiveSampler(baseline_rate=0.1),  # 10% baseline
 )
 ```
 

@@ -205,15 +205,22 @@ def parse_error(error: Any) -> ParsedError:
 
     if isinstance(error, Mapping):
         data = error.get("data") if isinstance(error.get("data"), Mapping) else None
-        nested = data.get("data") if isinstance(data, Mapping) and isinstance(data.get("data"), Mapping) else None
+        nested = (
+            data.get("data")
+            if isinstance(data, Mapping) and isinstance(data.get("data"), Mapping)
+            else None
+        )
         payload = nested or data or error
 
-        message = _pick_string(
-            payload.get("statusText"),
-            payload.get("statusMessage"),
-            payload.get("message"),
-            error.get("message"),
-        ) or "An error occurred"
+        message = (
+            _pick_string(
+                payload.get("statusText"),
+                payload.get("statusMessage"),
+                payload.get("message"),
+                error.get("message"),
+            )
+            or "An error occurred"
+        )
 
         return ParsedError(
             message=message,

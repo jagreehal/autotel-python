@@ -81,10 +81,12 @@ def test_init_accepts_raw_otel_resource_attribute_string() -> None:
 
 def test_init_merges_existing_otel_resource() -> None:
     """Users migrating from raw OTel can pass their existing Resource."""
-    existing_resource = Resource.create({
-        "cloud.provider": "aws",
-        "service.namespace": "checkout",
-    })
+    existing_resource = Resource.create(
+        {
+            "cloud.provider": "aws",
+            "service.namespace": "checkout",
+        }
+    )
 
     init(
         service="test",
@@ -305,15 +307,13 @@ def test_init_debug_only_no_otlp_exporter() -> None:
     # Should have exactly one processor (ConsoleSpanExporter wrapped in SimpleSpanProcessor)
     # and NO BatchSpanProcessor (which would be wrapping an OTLP exporter)
     batch_processors = [p for p in processors if isinstance(p, BatchSpanProcessor)]
-    console_processors = [
-        p for p in processors if isinstance(p, autotelSimpleSpanProcessor)
-    ]
+    console_processors = [p for p in processors if isinstance(p, autotelSimpleSpanProcessor)]
 
     assert len(batch_processors) == 0, "Should not have OTLP BatchSpanProcessor in debug-only mode"
     assert len(console_processors) == 1, "Should have ConsoleSpanExporter in debug mode"
-    assert isinstance(
-        console_processors[0].span_exporter, ConsoleSpanExporter
-    ), "Should use ConsoleSpanExporter"
+    assert isinstance(console_processors[0].span_exporter, ConsoleSpanExporter), (
+        "Should use ConsoleSpanExporter"
+    )
 
 
 def test_init_debug_with_explicit_endpoint_has_otlp() -> None:
@@ -332,11 +332,11 @@ def test_init_debug_with_explicit_endpoint_has_otlp() -> None:
 
     # Should have both OTLP (BatchSpanProcessor) and Console (SimpleSpanProcessor)
     batch_processors = [p for p in processors if isinstance(p, BatchSpanProcessor)]
-    console_processors = [
-        p for p in processors if isinstance(p, autotelSimpleSpanProcessor)
-    ]
+    console_processors = [p for p in processors if isinstance(p, autotelSimpleSpanProcessor)]
 
-    assert len(batch_processors) == 1, "Should have OTLP BatchSpanProcessor when endpoint is explicit"
+    assert len(batch_processors) == 1, (
+        "Should have OTLP BatchSpanProcessor when endpoint is explicit"
+    )
     assert len(console_processors) == 1, "Should have ConsoleSpanExporter in debug mode"
 
 
@@ -442,7 +442,9 @@ def test_init_supports_signal_specific_otlp_endpoints() -> None:
     assert isinstance(provider, TracerProvider)
     processors = provider._active_span_processor._span_processors
     batch_processors = [p for p in processors if isinstance(p, BatchSpanProcessor)]
-    assert batch_processors[0].span_exporter._endpoint == "https://traces.example.com/otlp/v1/traces"
+    assert (
+        batch_processors[0].span_exporter._endpoint == "https://traces.example.com/otlp/v1/traces"
+    )
 
     meter_provider = otel_metrics.get_meter_provider()
     assert isinstance(meter_provider, MeterProvider)
@@ -456,7 +458,10 @@ def test_init_supports_signal_specific_otlp_endpoints() -> None:
     logger_provider = otel_logs.get_logger_provider()
     assert isinstance(logger_provider, LoggerProvider)
     log_processor = logger_provider._multi_log_record_processor._log_record_processors[0]
-    assert log_processor._batch_processor._exporter._endpoint == "https://logs.example.com/otlp/v1/logs"
+    assert (
+        log_processor._batch_processor._exporter._endpoint
+        == "https://logs.example.com/otlp/v1/logs"
+    )
 
 
 def test_init_http_endpoint_is_normalized_to_traces_path() -> None:
@@ -496,9 +501,7 @@ def test_init_simple_span_processor_mode_exports_immediately() -> None:
 
     processors = provider._active_span_processor._span_processors
     batch_processors = [p for p in processors if isinstance(p, BatchSpanProcessor)]
-    simple_processors = [
-        p for p in processors if isinstance(p, autotelSimpleSpanProcessor)
-    ]
+    simple_processors = [p for p in processors if isinstance(p, autotelSimpleSpanProcessor)]
 
     assert len(batch_processors) == 0
     assert len(simple_processors) == 1

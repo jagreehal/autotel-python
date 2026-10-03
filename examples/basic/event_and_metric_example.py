@@ -83,33 +83,47 @@ async def process_checkout(ctx, user_id: str, cart_total: float) -> None:
     # PRODUCT EVENT → Subscribers (PostHog, Mixpanel)
     # ===================================================================
     # Track business outcome for product analytics
-    track("checkout.completed", {
-        "user_id": user_id,
-        "amount": cart_total,
-        "currency": "USD",
-        "payment_method": "credit_card",
-        # This goes to PostHog for funnel analysis, user segmentation
-    })
+    track(
+        "checkout.completed",
+        {
+            "user_id": user_id,
+            "amount": cart_total,
+            "currency": "USD",
+            "payment_method": "credit_card",
+            # This goes to PostHog for funnel analysis, user segmentation
+        },
+    )
 
     # ===================================================================
     # INFRASTRUCTURE METRICS → OTLP (OpenTelemetry)
     # ===================================================================
     # Track system performance for SRE/DevOps
-    metrics.trackEvent("checkout.success", {
-        "payment_method": "credit_card",
-        # This goes to Prometheus/Grafana for uptime monitoring
-    })
+    metrics.trackEvent(
+        "checkout.success",
+        {
+            "payment_method": "credit_card",
+            # This goes to Prometheus/Grafana for uptime monitoring
+        },
+    )
 
     # Track checkout latency for SLO monitoring
     duration_ms = (time.time() - start_time) * 1000
-    metrics.trackValue("checkout.duration", duration_ms, {
-        "success": str(success).lower(),
-    })
+    metrics.trackValue(
+        "checkout.duration",
+        duration_ms,
+        {
+            "success": str(success).lower(),
+        },
+    )
 
     # Track revenue for business metrics dashboard
-    metrics.trackValue("revenue", cart_total, {
-        "currency": "USD",
-    })
+    metrics.trackValue(
+        "revenue",
+        cart_total,
+        {
+            "currency": "USD",
+        },
+    )
 
     return {
         "success": success,
@@ -141,20 +155,26 @@ async def create_account(ctx, email: str, plan: str) -> None:
     # PRODUCT EVENT → Subscribers
     # ===================================================================
     # Track for product team to analyze growth, activation, retention
-    track("user.signup", {
-        "user_id": user_id,
-        "email": email,
-        "plan": plan,
-        "acquisition_channel": "organic",
-    })
+    track(
+        "user.signup",
+        {
+            "user_id": user_id,
+            "email": email,
+            "plan": plan,
+            "acquisition_channel": "organic",
+        },
+    )
 
     # ===================================================================
     # INFRASTRUCTURE METRICS → OTLP
     # ===================================================================
     # Track for SRE team to monitor signup service health
-    metrics.trackEvent("signup.success", {
-        "plan": plan,
-    })
+    metrics.trackEvent(
+        "signup.success",
+        {
+            "plan": plan,
+        },
+    )
 
     duration_ms = (time.time() - start_time) * 1000
     metrics.trackValue("signup.duration", duration_ms)
@@ -180,21 +200,27 @@ async def upgrade_plan(ctx, user_id: str, from_plan: str, to_plan: str) -> None:
     # PRODUCT EVENT → Subscribers
     # ===================================================================
     # Track for product/marketing team to analyze conversion paths
-    track("subscription.upgraded", {
-        "user_id": user_id,
-        "from_plan": from_plan,
-        "to_plan": to_plan,
-        "mrr_delta": revenue_delta,
-    })
+    track(
+        "subscription.upgraded",
+        {
+            "user_id": user_id,
+            "from_plan": from_plan,
+            "to_plan": to_plan,
+            "mrr_delta": revenue_delta,
+        },
+    )
 
     # ===================================================================
     # INFRASTRUCTURE METRICS → OTLP
     # ===================================================================
     # Track for finance dashboard
-    metrics.trackEvent("plan.upgrade", {
-        "from": from_plan,
-        "to": to_plan,
-    })
+    metrics.trackEvent(
+        "plan.upgrade",
+        {
+            "from": from_plan,
+            "to": to_plan,
+        },
+    )
 
     metrics.trackValue("mrr.delta", revenue_delta)
 

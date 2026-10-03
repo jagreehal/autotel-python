@@ -145,9 +145,7 @@ class AdaptiveSamplingProcessor(SpanProcessor):
         self.sampler = sampler
         self.next_processor = next_processor
 
-    def on_start(
-        self, span: ReadWriteSpan, parent_context: Context | None = None
-    ) -> None:
+    def on_start(self, span: ReadWriteSpan, parent_context: Context | None = None) -> None:
         """Called when a span starts."""
         if hasattr(self.next_processor, "on_start"):
             self.next_processor.on_start(span, parent_context)

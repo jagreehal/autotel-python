@@ -118,15 +118,17 @@ def test_parse_error_handles_structured_error_and_mapping() -> None:
     assert parsed_structured.why == "Card declined"
     assert parsed_structured.code == "PAYMENT_DECLINED"
 
-    parsed_mapping = parse_error({
-        "message": "fallback",
-        "data": {
-            "status": "409",
-            "message": "Conflict",
-            "fix": "Retry later",
-            "details": {"id": "order_123"},
-        },
-    })
+    parsed_mapping = parse_error(
+        {
+            "message": "fallback",
+            "data": {
+                "status": "409",
+                "message": "Conflict",
+                "fix": "Retry later",
+                "details": {"id": "order_123"},
+            },
+        }
+    )
 
     assert parsed_mapping.message == "Conflict"
     assert parsed_mapping.status == 409

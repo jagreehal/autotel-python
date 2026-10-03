@@ -12,6 +12,7 @@ def make_downstream_call() -> None:
     """Placeholder downstream call to demonstrate context propagation."""
     return None
 
+
 # ==================== ENTIRE SETUP ====================
 autotel.init(
     service_name="mcp-server",
@@ -55,12 +56,10 @@ async def my_mcp_tool(query: str) -> str:
 # ==================== ADVANCED: Custom Context Fields ====================
 # If you need custom baggage propagation, autotel provides simple APIs:
 
+
 def my_service_call() -> None:
     # Set baggage that will propagate to downstream services
-    with autotel.with_baggage({
-        "user.id": "user-123",
-        "tenant.id": "tenant-456"
-    }):
+    with autotel.with_baggage({"user.id": "user-123", "tenant.id": "tenant-456"}):
         # Make downstream calls here
         # autotel automatically propagates baggage through:
         # - HTTP headers (via instrumented requests/httpx)

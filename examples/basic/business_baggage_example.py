@@ -37,11 +37,14 @@ OrderBaggage = create_safe_baggage_schema(
 async def create_order(ctx: Any, order_id: str, customer_id: str, priority: str) -> None:
     """Producer: set baggage that will propagate to downstream spans/calls."""
     ctx.set_attribute("order.id", order_id)
-    new_ctx = OrderBaggage.set(None, {
-        "order_id": order_id,
-        "customer_id": customer_id,
-        "priority": priority,
-    })
+    new_ctx = OrderBaggage.set(
+        None,
+        {
+            "order_id": order_id,
+            "customer_id": customer_id,
+            "priority": priority,
+        },
+    )
     token = context.attach(new_ctx)
     try:
         await process_payment(order_id)
@@ -56,7 +59,9 @@ async def process_payment(ctx: Any, order_id: str) -> None:
     priority = OrderBaggage.get(None, "priority")
     # customer_id comes back hashed
     cust = OrderBaggage.get(None, "customer_id") or ""
-    print(f"[process_payment] order_id={oid}, priority={priority}, customer_id={cust[:20] if len(cust) > 20 else cust}...")
+    print(
+        f"[process_payment] order_id={oid}, priority={priority}, customer_id={cust[:20] if len(cust) > 20 else cust}..."
+    )
 
 
 def main() -> None:

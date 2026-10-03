@@ -82,7 +82,9 @@ async def summarize_user(ctx, profile: UserProfile) -> UserSummary:
     ctx.set_attribute("ai.provider", "ollama")
     ctx.set_attribute("ai.operation", "summarize")
 
-    prompt = f"Create a summary for this user: {profile.name}, age {profile.age}. Bio: {profile.bio}"
+    prompt = (
+        f"Create a summary for this user: {profile.name}, age {profile.age}. Bio: {profile.bio}"
+    )
 
     # Create a temporary agent with UserSummary output type
     summary_agent = Agent(

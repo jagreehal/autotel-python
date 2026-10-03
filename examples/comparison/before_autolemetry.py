@@ -34,11 +34,13 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 # Manual resource setup
-resource = Resource.create({
-    "service.name": os.getenv("OTEL_SERVICE_NAME", "flask-api"),
-    "service.namespace": "demo",
-    "deployment.environment": os.getenv("APP_ENV", "dev"),
-})
+resource = Resource.create(
+    {
+        "service.name": os.getenv("OTEL_SERVICE_NAME", "flask-api"),
+        "service.namespace": "demo",
+        "deployment.environment": os.getenv("APP_ENV", "dev"),
+    }
+)
 
 # Manual tracer setup
 trace_provider = TracerProvider(resource=resource)
@@ -61,9 +63,7 @@ request_counter = meter.create_counter(
 latency_histogram = meter.create_histogram(
     "http.server.request.duration", unit="ms", description="Request duration"
 )
-token_counter = meter.create_counter(
-    "llm.tokens", unit="1", description="LLM tokens"
-)
+token_counter = meter.create_counter("llm.tokens", unit="1", description="LLM tokens")
 
 # Manual logs setup
 log_exporter = OTLPHTTPLogExporter()
@@ -81,6 +81,7 @@ app = Flask(__name__)
 with contextlib.suppress(Exception):
     FlaskInstrumentor().instrument_app(app)
 
+
 @app.route("/ask", methods=["POST"])
 def ask_question() -> None:
     started = time.perf_counter()
@@ -95,7 +96,7 @@ def ask_question() -> None:
             "http.route": "/ask",
             "http.method": "POST",
             # ... many more manual attributes
-        }
+        },
     ) as root_span:
         try:
             data = request.get_json(force=True) or {}
@@ -110,7 +111,9 @@ def ask_question() -> None:
                 root_span.set_attribute("error", True)
                 root_span.set_attribute("error.type", "bad_request")
                 latency_ms = int((time.perf_counter() - started) * 1000)
-                latency_histogram.record(latency_ms, {"http.route": "/ask", "http.status_code": 400})
+                latency_histogram.record(
+                    latency_ms, {"http.route": "/ask", "http.status_code": 400}
+                )
                 return jsonify({"error": "Missing question"}), 400
 
             # Nested span for LLM call - another 10+ lines!
@@ -120,7 +123,7 @@ def ask_question() -> None:
                     "llm.vendor": "openai",
                     "llm.model": "gpt-4",
                     "llm.input.role.system": "You are a helpful assistant",
-                }
+                },
             ) as llm_span:
                 # Simulate LLM call
                 answer = f"Mock answer to: {question}"
@@ -136,7 +139,9 @@ def ask_question() -> None:
 
                 # Manual metric recording for tokens
                 token_counter.add(prompt_tokens, {"llm.token_type": "prompt", "llm.model": "gpt-4"})
-                token_counter.add(completion_tokens, {"llm.token_type": "completion", "llm.model": "gpt-4"})
+                token_counter.add(
+                    completion_tokens, {"llm.token_type": "completion", "llm.model": "gpt-4"}
+                )
 
                 # Propagate attributes to parent span
                 root_span.set_attribute("llm.usage.prompt_tokens", prompt_tokens)

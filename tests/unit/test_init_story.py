@@ -201,7 +201,9 @@ def test_migration_safety_processors_reduce_cardinality_and_secrets_story() -> N
     assert "GET /health" not in names
 
     story.and_("sensitive attributes are redacted before they leave the process")
-    checkout_span = next(finished_span for finished_span in spans if finished_span.name == "POST /checkout")
+    checkout_span = next(
+        finished_span for finished_span in spans if finished_span.name == "POST /checkout"
+    )
     assert checkout_span.attributes["authorization"] == "[REDACTED]"
     assert checkout_span.attributes["customer.email"] == "a***@***.com"
     assert checkout_span.attributes["payment.card"] == "****4242"
@@ -219,9 +221,7 @@ def _trace_exporter_endpoint() -> str:
 
 def _trace_exporter() -> Any:
     batch_processors = [
-        processor
-        for processor in _span_processors()
-        if isinstance(processor, BatchSpanProcessor)
+        processor for processor in _span_processors() if isinstance(processor, BatchSpanProcessor)
     ]
     assert len(batch_processors) == 1
     return batch_processors[0].span_exporter
@@ -246,9 +246,7 @@ def _log_exporter_endpoint() -> str:
 
 def _simple_processor_endpoints(processors: tuple[Any, ...]) -> list[str]:
     simple_processors = [
-        processor
-        for processor in processors
-        if isinstance(processor, SimpleSpanProcessor)
+        processor for processor in processors if isinstance(processor, SimpleSpanProcessor)
     ]
     return [
         str(processor.span_exporter._endpoint)  # noqa: SLF001

@@ -610,9 +610,7 @@ def trace_distributed_step(
                 on_complete(ctx, result)
             span.add_event("workflow.step.completed", {"workflow.step.name": name})
 
-        def _on_error(
-            span: Span, ctx: DistributedStepContext | None, exc: Exception
-        ) -> None:
+        def _on_error(span: Span, ctx: DistributedStepContext | None, exc: Exception) -> None:
             if on_error and ctx is not None:
                 on_error(ctx, exc)
             span.add_event(

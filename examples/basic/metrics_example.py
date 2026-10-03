@@ -44,26 +44,40 @@ async def process_payment(ctx, amount: float, currency: str) -> None:
 
     # Track event count as OpenTelemetry counter → OTLP
     if success:
-        metrics.trackEvent("payment.success", {
-            "currency": currency,
-            "payment_method": "credit_card",
-        })
+        metrics.trackEvent(
+            "payment.success",
+            {
+                "currency": currency,
+                "payment_method": "credit_card",
+            },
+        )
     else:
-        metrics.trackEvent("payment.failure", {
-            "currency": currency,
-            "error": "insufficient_funds",
-        })
+        metrics.trackEvent(
+            "payment.failure",
+            {
+                "currency": currency,
+                "error": "insufficient_funds",
+            },
+        )
 
     # Track payment amount as OpenTelemetry histogram → OTLP
-    metrics.trackValue("payment.amount", amount, {
-        "currency": currency,
-    })
+    metrics.trackValue(
+        "payment.amount",
+        amount,
+        {
+            "currency": currency,
+        },
+    )
 
     # Track processing duration as OpenTelemetry histogram → OTLP
     duration_ms = (time.time() - start_time) * 1000
-    metrics.trackValue("payment.duration", duration_ms, {
-        "success": str(success).lower(),
-    })
+    metrics.trackValue(
+        "payment.duration",
+        duration_ms,
+        {
+            "success": str(success).lower(),
+        },
+    )
 
     return {"success": success, "amount": amount, "currency": currency}
 
@@ -79,17 +93,24 @@ async def handle_api_request(ctx, endpoint: str) -> None:
     await asyncio.sleep(0.05)
 
     # Track API request count as counter → OTLP
-    metrics.trackEvent("api.request", {
-        "endpoint": endpoint,
-        "method": "POST",
-        "status_code": "200",
-    })
+    metrics.trackEvent(
+        "api.request",
+        {
+            "endpoint": endpoint,
+            "method": "POST",
+            "status_code": "200",
+        },
+    )
 
     # Track API latency as histogram → OTLP
     latency_ms = (time.time() - start_time) * 1000
-    metrics.trackValue("api.latency", latency_ms, {
-        "endpoint": endpoint,
-    })
+    metrics.trackValue(
+        "api.latency",
+        latency_ms,
+        {
+            "endpoint": endpoint,
+        },
+    )
 
     return {"endpoint": endpoint, "latency_ms": latency_ms}
 
@@ -103,20 +124,31 @@ async def process_order(ctx, order_id: str, items_count: int) -> None:
     await asyncio.sleep(0.1)
 
     # Track order completion as counter → OTLP
-    metrics.trackEvent("order.completed", {
-        "order_id": order_id,
-    })
+    metrics.trackEvent(
+        "order.completed",
+        {
+            "order_id": order_id,
+        },
+    )
 
     # Track order size as histogram → OTLP
-    metrics.trackValue("order.items", float(items_count), {
-        "order_type": "online",
-    })
+    metrics.trackValue(
+        "order.items",
+        float(items_count),
+        {
+            "order_type": "online",
+        },
+    )
 
     # Track revenue as histogram → OTLP
     revenue = items_count * 29.99
-    metrics.trackValue("revenue", revenue, {
-        "currency": "USD",
-    })
+    metrics.trackValue(
+        "revenue",
+        revenue,
+        {
+            "currency": "USD",
+        },
+    )
 
     return {"order_id": order_id, "items": items_count, "revenue": revenue}
 
@@ -133,31 +165,42 @@ async def main() -> None:
 
     # Process payments
     print("\n📊 Processing payments...")
-    for i, (amount, currency) in enumerate([
-        (99.99, "USD"),
-        (149.99, "USD"),
-        (79.99, "EUR"),
-    ], 1):
+    for i, (amount, currency) in enumerate(
+        [
+            (99.99, "USD"),
+            (149.99, "USD"),
+            (79.99, "EUR"),
+        ],
+        1,
+    ):
         result = await process_payment(amount, currency)
-        print(f"  {i}. Payment {result['amount']} {result['currency']}: {'✓' if result['success'] else '✗'}")
+        print(
+            f"  {i}. Payment {result['amount']} {result['currency']}: {'✓' if result['success'] else '✗'}"
+        )
 
     # Handle API requests
     print("\n📊 Handling API requests...")
-    for i, endpoint in enumerate([
-        "/api/users",
-        "/api/orders",
-        "/api/products",
-    ], 1):
+    for i, endpoint in enumerate(
+        [
+            "/api/users",
+            "/api/orders",
+            "/api/products",
+        ],
+        1,
+    ):
         result = await handle_api_request(endpoint)
         print(f"  {i}. {result['endpoint']}: {result['latency_ms']:.2f}ms")
 
     # Process orders
     print("\n📊 Processing orders...")
-    for i, (order_id, items) in enumerate([
-        ("order-1", 3),
-        ("order-2", 5),
-        ("order-3", 2),
-    ], 1):
+    for i, (order_id, items) in enumerate(
+        [
+            ("order-1", 3),
+            ("order-2", 5),
+            ("order-3", 2),
+        ],
+        1,
+    ):
         result = await process_order(order_id, items)
         print(f"  {i}. {result['order_id']}: {result['items']} items, ${result['revenue']:.2f}")
 

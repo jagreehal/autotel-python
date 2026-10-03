@@ -158,7 +158,10 @@ def _wrap_span_processor(
     *,
     span_filter: SpanFilter | None,
     span_name_normalizer: SpanNameNormalizer | SpanNameNormalizerPreset | None,
-    attribute_redactor: AttributeRedactorConfig | AttributeRedactorPreset | AttributeRedactor | None,
+    attribute_redactor: AttributeRedactorConfig
+    | AttributeRedactorPreset
+    | AttributeRedactor
+    | None,
 ) -> SpanProcessor:
     """Apply safety/migration processors around a sink processor."""
     wrapped = processor
@@ -216,7 +219,10 @@ def init(
     logs: bool | Literal["auto"] | None = None,  # OTLP logs configuration
     span_filter: SpanFilter | None = None,  # Drop unwanted spans before export
     span_name_normalizer: SpanNameNormalizer | SpanNameNormalizerPreset | None = None,
-    attribute_redactor: AttributeRedactorConfig | AttributeRedactorPreset | AttributeRedactor | None = None,
+    attribute_redactor: AttributeRedactorConfig
+    | AttributeRedactorPreset
+    | AttributeRedactor
+    | None = None,
     openllmetry: dict[str, Any] | None = None,  # OpenLLMetry configuration
     pydantic_ai: bool | Mapping[str, Any] = False,  # Instrument all Pydantic AI agents
     baggage: bool | str | None = None,  # Auto-copy baggage to span attributes
