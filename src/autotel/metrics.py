@@ -42,12 +42,7 @@ class Metric:
     """
     Metric class for OpenTelemetry metrics with auto-export to OTLP.
 
-    Note: In the Node.js version, there are two separate classes:
-    - `Metric.trackEvent()` → sends to OTLP (OpenTelemetry metrics)
-    - `Event.trackEvent()` → sends to subscribers (PostHog, etc.)
-
-    This Python class handles the Metric side (OTLP).
-    For product events to subscribers, use the Event class from events.py
+    For product events to subscribers, use the Event class from events.py.
     """
 
     def __init__(
@@ -81,6 +76,7 @@ class Metric:
         self._meter: Meter | None = None
         self._counters: dict[str, Counter] = {}
         self._histograms: dict[str, Histogram] = {}
+        self._owns_provider = False
 
     def _setup(self) -> None:
         """Set up meter provider and meter."""
@@ -108,6 +104,7 @@ class Metric:
 
         # Create meter provider
         self._meter_provider = MeterProvider(metric_readers=[reader])
+        self._owns_provider = True
         otel_metrics.set_meter_provider(self._meter_provider)
 
         # Get meter
@@ -190,8 +187,9 @@ class Metric:
 
     async def shutdown(self) -> None:
         """Shutdown metrics system and flush pending metrics."""
-        if self._meter_provider:
+        if self._meter_provider and self._owns_provider:
             self._meter_provider.shutdown()
+        if self._meter_provider:
             self._meter_provider = None
             self._meter = None
 

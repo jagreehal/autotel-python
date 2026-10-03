@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-03
+
+### Added
+- `get_request_logger()` and `RequestLogger` collect nested fields onto the active span as one wide event per request.
+- `FileSubscriber` writes `track()` events to an NDJSON file, with or without an event loop.
+- `autotel.http.extract_trace_context()` reads W3C trace context and baggage from incoming headers.
+- `bucket()` and `compare_cohorts()` in `autotel.analysis` for comparing slow and normal requests.
+- `trace("name", fn)` wraps an existing function.
+- `AUTOTEL_DEBUG_BAGGAGE_KEY` constant (`"autotel.debug"`).
+
+### Changed
+- `init(metrics=True)` also sets up the `Metric` helper, so `create_counter()` and `create_histogram()` work straight away.
+- `shutdown()` sends events still queued for async subscribers when no event loop was running.
+
 ## [0.7.0] - 2026-10-03
 
 ### Added

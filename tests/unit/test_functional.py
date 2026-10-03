@@ -140,11 +140,7 @@ def test_trace_func_factory_pattern(exporter: Any) -> None:
 
 def test_trace_func_no_orphan_spans(exporter: Any) -> None:
     """Test that pattern detection doesn't create orphan spans."""
-    # This test verifies that pattern detection using inspect.signature()
-    # doesn't create orphan spans. In the Node.js version, calling async
-    # functions during pattern detection would cause them to start executing,
-    # creating orphan spans. In Python, we use inspect.signature() to inspect
-    # types without executing functions.
+    # Pattern detection must not call the function
 
     execution_count = 0
 

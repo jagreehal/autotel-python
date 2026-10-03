@@ -3,13 +3,14 @@
 import functools
 import inspect
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import contextmanager
 from typing import Any
 from urllib.parse import urlparse
 
+from opentelemetry import context as otel_context
 from opentelemetry import trace
-from opentelemetry.propagate import inject
+from opentelemetry.propagate import extract, inject
 from opentelemetry.trace import StatusCode
 
 from .context import TraceContext
@@ -194,6 +195,24 @@ def inject_trace_context() -> dict[str, str]:
     headers: dict[str, str] = {}
     inject(headers)
     return headers
+
+
+def extract_trace_context(headers: Mapping[str, str]) -> otel_context.Context:
+    """
+    Extract W3C Trace Context (and baggage) from inbound HTTP headers.
+
+    Example:
+        >>> from opentelemetry import context
+        >>> incoming = extract_trace_context(dict(request.headers))
+        >>> token = context.attach(incoming)
+        >>> try:
+        ...     handle(request)
+        ... finally:
+        ...     context.detach(token)
+    """
+    # Propagators look up lowercase keys
+    normalised = {str(key).lower(): str(value) for key, value in headers.items()}
+    return extract(normalised)
 
 
 def _extract_path(url: str) -> str:

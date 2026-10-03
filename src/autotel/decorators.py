@@ -52,8 +52,16 @@ def trace(
 ) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
 
 
+@overload
+def trace(
+    func: str,
+    wrapped: Callable[P, R],
+) -> Callable[P, R]: ...
+
+
 def trace(
     func: Callable[P, R] | str | None = None,
+    wrapped: Callable[P, R] | None = None,
     *,
     name: str | None = None,
 ) -> Callable[P, R] | Callable[[Callable[P, R]], Callable[P, R]]:
@@ -71,14 +79,22 @@ def trace(
         >>> async def get_user(user_id: str):
         ...     return await db.users.find(user_id)
 
+        >>> # Wrap an existing function
+        >>> traced = trace("bank.verify_pin", verify_pin)
+
         >>> @trace
         >>> async def create_user(ctx, data: dict[str, Any]):
         ...     ctx.set_attribute('user.email', data['email'])
         ...     return await db.users.create(data)
     """
 
+    # `trace("span.name", fn)`: wrap immediately.
+    if isinstance(func, str) and wrapped is not None:
+        name = func
+        func = wrapped
+
     # `@trace('span.name')`: the span name given positionally.
-    if isinstance(func, str):
+    elif isinstance(func, str):
         name, func = func, None
 
     def decorator(fn: Callable[P, R]) -> Callable[P, R]:
