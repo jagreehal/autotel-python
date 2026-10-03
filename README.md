@@ -1166,6 +1166,24 @@ init(
 
 Running a local Datadog Agent (7.35+ with OTLP enabled)? Use `datadog_preset(use_agent=True)`. The Agent handles auth, so you don't need an API key.
 
+### Langfuse
+
+`langfuse_preset()` points OTLP HTTP at Langfuse's public OTEL ingest with Basic auth:
+
+```python
+from autotel import init
+from autotel.presets import langfuse_preset
+
+init(
+    service="agent-demo",
+    preset=langfuse_preset(
+        public_key="pk-lf-...",
+        secret_key="sk-lf-...",
+        # host="https://us.cloud.langfuse.com",  # or self-hosted
+    ),
+)
+```
+
 ### Adaptive Sampling
 
 ```python
@@ -1357,6 +1375,20 @@ This automatically instruments:
 - LlamaIndex
 
 Requires: `pip install traceloop`
+
+### Agent and tool spans
+
+`invoke_agent()` and `execute_tool()` create spans that follow the OTel GenAI conventions:
+
+```python
+from autotel import execute_tool, invoke_agent
+
+with invoke_agent(agent_name="support", model="gpt-4o"):
+    with execute_tool("refund_lookup", tool_call_id="call-1", arguments='{"order_id":"1"}'):
+        result = lookup_refund("1")
+```
+
+`execute_tool()` also records a `gen_ai.tool.call` event. Pass `record_event=False` to skip it.
 
 ## Validation
 
@@ -1560,7 +1592,7 @@ Use cases:
 
 Production ready. All core features implemented and tested.
 
-**Version:** 0.2.0
+**Version:** 0.7.0
 **Python:** 3.10+
 **License:** MIT
 

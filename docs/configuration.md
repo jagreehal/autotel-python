@@ -65,6 +65,8 @@ you use it; defaults stay sensible and quiet.
 |---|---|---|
 | `devtools` | — | Local autotel-devtools shortcut; `True` ⇒ `http://127.0.0.1:4318` and enables metrics/logs. |
 | `debug` | `False` | **Opt-in** console span output. Pass `debug=True` to print spans; off by default so notebooks/CLIs stay quiet. |
+| `export_timeout` | `None` (`2.0` in `simple` mode) | OTLP exporter / batch processor timeout in seconds. Caps hangs when the collector is down. |
+| `span_processor_mode` | `batch` | `simple` exports on each `span.end()` (scripts/demos); prefer `batch` in production. |
 
 ### Instrumentation
 

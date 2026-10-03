@@ -200,6 +200,7 @@ def init(
     batch_timeout: int = 5000,  # 5s batch timeout
     max_queue_size: int = 2048,
     max_export_batch_size: int = 512,
+    export_timeout: float | None = None,  # OTLP export timeout (seconds)
     span_processor_mode: Literal["batch", "simple"] = "batch",
     span_processor: SpanProcessor | None = None,  # For testing/custom configs
     span_processors: list[SpanProcessor] | None = None,  # Multiple processors
@@ -258,6 +259,12 @@ def init(
         batch_timeout: Batch timeout in milliseconds
         max_queue_size: Maximum queue size
         max_export_batch_size: Maximum export batch size
+        export_timeout: OTLP export timeout in seconds for span/metric/log exporters
+            and batch processors. ``None`` uses the OpenTelemetry SDK default (10s)
+            in ``batch`` mode. In ``simple`` mode the default is ``2.0`` so a down
+            unreachable collector cannot stall each ``span.end()`` for long.
+            Override with ``OTEL_EXPORTER_OTLP_TIMEOUT`` when this is left ``None``
+            and you are not in simple mode.
         span_processor_mode: "batch" for production export, "simple" for immediate
             export in notebooks, scripts, and local demos.
         span_processor: Custom span processor (single, legacy param)
@@ -355,6 +362,16 @@ def init(
         )
         if logs is None:
             logs = preset.get("logs")
+
+    # simple mode exports inside span.end(), so keep the wait short by default
+    resolved_export_timeout = export_timeout
+    if resolved_export_timeout is None and span_processor_mode == "simple":
+        resolved_export_timeout = 2.0
+    exporter_timeout_kwargs: dict[str, Any] = {}
+    processor_timeout_kwargs: dict[str, Any] = {}
+    if resolved_export_timeout is not None:
+        exporter_timeout_kwargs["timeout"] = resolved_export_timeout
+        processor_timeout_kwargs["export_timeout_millis"] = int(resolved_export_timeout * 1000)
 
     # Set up validation if provided
     if validation:
@@ -461,6 +478,7 @@ def init(
                 exporter: Any = HTTPExporter(
                     endpoint=exporter_endpoint,
                     headers=headers or {},
+                    **exporter_timeout_kwargs,
                 )
             else:
                 if GRPCExporter is None:
@@ -472,6 +490,7 @@ def init(
                     endpoint=exporter_endpoint,
                     headers=headers or {},
                     insecure=insecure,
+                    **exporter_timeout_kwargs,
                 )
 
             exporter_list.append(exporter)
@@ -488,6 +507,7 @@ def init(
                         max_queue_size=max_queue_size,
                         schedule_delay_millis=batch_timeout,
                         max_export_batch_size=max_export_batch_size,
+                        **processor_timeout_kwargs,
                     )
                 )
 
@@ -565,13 +585,17 @@ def init(
                 endpoint=metric_exporter_endpoint,
                 headers=headers or {},
                 insecure=insecure,
+                **exporter_timeout_kwargs,
             )
         else:
             metric_exporter = HTTPMetricExporter(
                 endpoint=metric_exporter_endpoint,
                 headers=headers or {},
+                **exporter_timeout_kwargs,
             )
-        resolved_metric_readers.append(PeriodicExportingMetricReader(metric_exporter))
+        resolved_metric_readers.append(
+            PeriodicExportingMetricReader(metric_exporter, **processor_timeout_kwargs)
+        )
 
     if resolved_metric_readers:
         meter_provider = MeterProvider(resource=resource, metric_readers=resolved_metric_readers)
@@ -598,13 +622,17 @@ def init(
                 endpoint=log_exporter_endpoint,
                 headers=headers or {},
                 insecure=insecure,
+                **exporter_timeout_kwargs,
             )
         else:
             log_exporter = HTTPLogExporter(
                 endpoint=log_exporter_endpoint,
                 headers=headers or {},
+                **exporter_timeout_kwargs,
             )
-        resolved_log_processors.append(BatchLogRecordProcessor(log_exporter))
+        resolved_log_processors.append(
+            BatchLogRecordProcessor(log_exporter, **processor_timeout_kwargs)
+        )
 
     if resolved_log_processors:
         logger_provider = LoggerProvider(resource=resource)
@@ -701,5 +729,8 @@ def init(
 
         auto_flush_if_serverless(shutdown_sync)
 
-    # Set initialized flag
+    # New providers need their own shutdown()
+    from .shutdown import reset_shutdown_state
+
+    reset_shutdown_state()
     _INITIALIZED = True

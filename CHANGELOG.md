@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-03
+
+### Added
+- `init(export_timeout=...)` sets the timeout for OTLP exporters and batch processors. `simple` mode defaults to 2 seconds.
+- `langfuse_preset()` sends traces to Langfuse over OTLP.
+- `invoke_agent()` and `execute_tool()` context managers for GenAI agent and tool spans.
+
+### Changed
+- `shutdown()` shuts down the tracer provider and works again after a re-`init()`.
+- `shutdown_sync()` flushes and shuts down providers when called inside a running event loop.
+
 ## [0.6.0] - 2026-09-22
 
 ### Added
