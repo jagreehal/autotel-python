@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-03
+
 ### Fixed
 - MCP client instrumentation works with mcp 2.x (protocol 2026-07-28, stateless). Trace context goes in the SDK's `meta=` argument rather than `_meta=`, which raised `TypeError: call_tool() got an unexpected keyword argument '_meta'`, and it no longer leaks into tool `arguments`. Clients that accept no meta argument are left alone.
 
