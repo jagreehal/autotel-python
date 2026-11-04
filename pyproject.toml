@@ -29,10 +29,10 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "opentelemetry-api>=1.44.0",
-    "opentelemetry-sdk>=1.44.0",
-    "opentelemetry-exporter-otlp>=1.44.0",
-    "pydantic>=2.13.5",
+    "opentelemetry-api>=1.45.2",
+    "opentelemetry-sdk>=1.45.2",
+    "opentelemetry-exporter-otlp>=1.45.2",
+    "pydantic>=2.14.2",
     "typing-extensions>=4.16.0",
 ]
 
@@ -48,25 +48,31 @@ Issues = "https://github.com/jagreehal/autotel-python/issues"
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=9.1.1",
-    "pytest-asyncio>=1.4.0",
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.4.1",
     "pytest-cov>=7.1.0",
-    "ruff>=0.16.8",
-    "mypy>=2.3.1",
+    "ruff>=0.17.3",
+    "mypy>=2.4.1",
     "fastapi>=0.141.1",
+    "flask>=3.1.0",
+    "django>=5.2",
+    "grpcio>=1.84.0",
     "httpx>=0.28.1",
     "build>=1.6.1",
     "twine>=7.0.0",
     "executable-stories-pytest>=0.1.1",
 ]
 fastapi = [
-    "opentelemetry-instrumentation-fastapi>=0.65b0",
+    "fastapi>=0.141.1",
 ]
 django = [
-    "opentelemetry-instrumentation-django>=0.65b0",
+    "django>=5.2",
 ]
 flask = [
-    "opentelemetry-instrumentation-flask>=0.65b0",
+    "flask>=3.1.0",
+]
+grpc = [
+    "grpcio>=1.84.0",
 ]
 events = [
     "httpx>=0.28.1",
@@ -75,12 +81,16 @@ logging = [
     "structlog>=26.1.0",
 ]
 pydantic-ai = [
-    "pydantic-ai>=2.47.0",
-    "ollama>=0.6.2",
+    "pydantic-ai>=2.54.0",
+    "ollama>=0.6.3",
 ]
 all = [
-    "autotel[fastapi,django,flask,events,logging,pydantic-ai]",
+    "autotel[fastapi,django,flask,grpc,events,logging,pydantic-ai]",
 ]
+
+[tool.uv]
+# 2.9.0 fixes CVE-2026-114605 but needs Python 3.11, so 3.10 stays on 2.8.0.
+constraint-dependencies = ["dnspython>=2.9.0; python_version >= '3.11'"]
 
 [build-system]
 requires = ["hatchling"]
@@ -165,6 +175,7 @@ module = [
     "flask.*",
     "structlog.*",
     "django.*",
+    "grpc.*",
     "traceloop.*",
 ]
 ignore_missing_imports = true
@@ -172,4 +183,3 @@ ignore_missing_imports = true
 [tool.bandit]
 exclude_dirs = ["tests", "examples"]
 skips = ["B101"]  # Skip assert_used (common in tests)
-

@@ -2,6 +2,7 @@
 
 import os
 from typing import Literal, TypedDict
+from urllib.parse import unquote
 
 
 class OtelEnvVars(TypedDict, total=False):
@@ -60,14 +61,21 @@ def resolve_otel_env() -> OtelEnvVars:
     if resource_attrs := os.getenv("OTEL_RESOURCE_ATTRIBUTES"):
         env_vars["OTEL_RESOURCE_ATTRIBUTES"] = resource_attrs
 
-    if (protocol := os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL")) and protocol in (
-        "http/protobuf",
-        "grpc",
-        "http",
-    ):
+    if protocol := os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL"):
+        if protocol not in ("http/protobuf", "grpc", "http"):
+            # opentelemetry-python has no http/json exporter, so that value lands here too.
+            raise ValueError(
+                f"Unusable OTEL_EXPORTER_OTLP_PROTOCOL={protocol}: "
+                "use http/protobuf (the default) or grpc"
+            )
         env_vars["OTEL_EXPORTER_OTLP_PROTOCOL"] = protocol  # type: ignore[typeddict-item]
 
     return env_vars
+
+
+def signal_disabled(signal: Literal["traces", "metrics", "logs"]) -> bool:
+    """True for ``OTEL_{TRACES,METRICS,LOGS}_EXPORTER=none``, for backends that take one signal."""
+    return os.getenv(f"OTEL_{signal.upper()}_EXPORTER", "").strip().lower() == "none"
 
 
 def parse_resource_attributes(input_str: str | None) -> dict[str, str]:
@@ -139,7 +147,8 @@ def parse_otlp_headers(input_str: str | None) -> dict[str, str]:
         value = value.strip()
 
         if key and value:
-            headers[key] = value
+            # The OTel spec percent-encodes values: Authorization=Basic%20abc
+            headers[key] = unquote(value)
 
     return headers
 

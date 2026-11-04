@@ -1,5 +1,6 @@
 """Initialize autotel with OpenTelemetry SDK."""
 
+import logging
 from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass
@@ -50,8 +51,15 @@ try:
 except ImportError:
     GRPCLogExporter = None  # type: ignore[assignment, misc]
 
-from .env_config import parse_otlp_headers, parse_resource_attributes, resolve_config_from_env
+from .env_config import (
+    parse_otlp_headers,
+    parse_resource_attributes,
+    resolve_config_from_env,
+    signal_disabled,
+)
 from .events import EventSubscriber
+from .logging import LogFile, configure_log_output
+from .redaction import RedactPiiLogProcessor, RedactPiiProcessor, redact_url, set_redact_pii
 from .sampling import AdaptiveSampler, AdaptiveSamplingProcessor
 from .span_processors import (
     AttributeRedactingProcessor,
@@ -66,6 +74,13 @@ from .span_processors import (
 )
 
 _INITIALIZED = False
+
+_logger = logging.getLogger("autotel")
+
+
+def is_initialized() -> bool:
+    """True once ``init()`` has run, so integrations don't replace the app's setup."""
+    return _INITIALIZED
 
 
 @dataclass(frozen=True)
@@ -130,6 +145,18 @@ def _format_endpoint_url(
     return f"{endpoint.rstrip('/')}{suffix}"
 
 
+def _signal_url(
+    env_config: Mapping[str, Any],
+    signal: Literal["traces", "metrics", "logs"],
+    configured: str,
+    protocol: Literal["http", "grpc"],
+) -> str:
+    """The URL for one signal. The spec uses ``OTEL_EXPORTER_OTLP_{SIGNAL}_ENDPOINT`` as is."""
+    return env_config.get(f"{signal}_endpoint") or _format_endpoint_url(
+        configured, signal, protocol
+    )
+
+
 def _instrument_pydantic_ai(settings: bool | Mapping[str, Any] = True) -> None:
     """Enable Pydantic AI's built-in OpenTelemetry hooks when installed.
 
@@ -162,9 +189,10 @@ def _wrap_span_processor(
     | AttributeRedactorPreset
     | AttributeRedactor
     | None,
+    redact_pii: bool,
 ) -> SpanProcessor:
     """Apply safety/migration processors around a sink processor."""
-    wrapped = processor
+    wrapped = RedactPiiProcessor(processor) if redact_pii else processor
     if attribute_redactor is not None:
         wrapped = AttributeRedactingProcessor(wrapped, attribute_redactor)
     if span_filter is not None:
@@ -226,14 +254,21 @@ def init(
     openllmetry: dict[str, Any] | None = None,  # OpenLLMetry configuration
     pydantic_ai: bool | Mapping[str, Any] = False,  # Instrument all Pydantic AI agents
     baggage: bool | str | None = None,  # Auto-copy baggage to span attributes
+    redact_pii: bool = False,  # Scrub spans, logs and events at export
+    log_file: LogFile | None = None,  # Rolling log files (or AUTOTEL_LOG_FILE_DIR)
+    json_logs: bool = False,  # JSON lines with trace_id on stdout
 ) -> None:
     """
     Initialize autotel with OpenTelemetry SDK.
 
     Configuration priority (highest to lowest):
-    1. Explicit parameters
+    1. A preset's endpoint and protocol
     2. Environment variables (OTEL_SERVICE_NAME, OTEL_EXPORTER_OTLP_ENDPOINT, etc.)
-    3. Defaults
+    3. Explicit parameters
+    4. Defaults
+
+    Setting an endpoint turns on traces, metrics and logs. Pass ``metrics=False`` or
+    ``logs=False``, or set ``OTEL_METRICS_EXPORTER=none``, to leave one out.
 
     Example:
         >>> from autotel import init
@@ -286,9 +321,9 @@ def init(
         preset: Preset configuration (from presets module)
         validation: Validation configuration
         metrics: Metrics configuration. True creates an OTLP metric reader from endpoint.
-            Defaults to True when devtools is enabled.
+            Defaults to True when an endpoint or devtools is set, unless a preset is used.
         logs: True creates an OTLP log processor from endpoint.
-            Defaults to True when devtools is enabled.
+            Defaults to True when an endpoint or devtools is set, unless a preset is used.
         span_filter: Predicate returning True to keep a completed span.
         span_name_normalizer: Normalizer function or preset ("rest-api", "graphql", "minimal").
         attribute_redactor: Redaction preset/config/callable for span attributes.
@@ -301,30 +336,28 @@ def init(
             - True: adds baggage with 'baggage.' prefix (e.g. baggage.tenant.id)
             - str: uses custom prefix (e.g. 'ctx' → ctx.tenant.id, '' → tenant.id)
             - None/False: disabled (default)
+        redact_pii: Scrub emails, Luhn-valid card numbers, bearer tokens and passwords
+            from span attributes, span events, logs and ``track()`` events at export.
+            Hides ``url.query`` values and URL credentials, and drops client IPs.
+        log_file: Write rolling log files, such as ``LogFile("logs", rotation="hourly")``.
+            ``AUTOTEL_LOG_FILE_DIR`` turns this on with no code.
+        json_logs: Print JSON lines with ``trace_id`` and ``span_id`` to stdout.
     """
     global _INITIALIZED
 
     # Resolve environment variables (standard OTEL env vars)
     env_config = resolve_config_from_env()
 
-    # Merge configs: explicit config > env vars > defaults
-    # Priority: explicit parameters override env vars
-    if service is None:
-        service = env_config.get("service")
-    if endpoint is None:
-        endpoint = env_config.get("endpoint")
-    if traces_endpoint is None:
-        traces_endpoint = env_config.get("traces_endpoint")
-    if metrics_endpoint is None:
-        metrics_endpoint = env_config.get("metrics_endpoint")
-    if logs_endpoint is None:
-        logs_endpoint = env_config.get("logs_endpoint")
-    if protocol is None:
-        protocol = env_config.get("protocol")
+    # OTEL_* variables beat code, so a deployment changes behaviour with no code change.
+    service = env_config.get("service", service)
+    endpoint = env_config.get("endpoint", endpoint)
+    traces_endpoint = env_config.get("traces_endpoint", traces_endpoint)
+    metrics_endpoint = env_config.get("metrics_endpoint", metrics_endpoint)
+    logs_endpoint = env_config.get("logs_endpoint", logs_endpoint)
+    protocol = env_config.get("protocol", protocol)
     if isinstance(headers, str):
         headers = parse_otlp_headers(headers)
-    if headers is None and "headers" in env_config:
-        headers = env_config["headers"]
+    headers = env_config.get("headers", headers)
 
     if isinstance(resource_attributes, str):
         resource_attributes = parse_resource_attributes(resource_attributes)
@@ -340,7 +373,7 @@ def init(
     # Merge resource attributes
     env_resource_attrs = env_config.get("resource_attributes", {})
     if resource_attributes:
-        resource_attributes = {**env_resource_attrs, **resource_attributes}
+        resource_attributes = {**resource_attributes, **env_resource_attrs}
     elif env_resource_attrs:
         resource_attributes = env_resource_attrs
 
@@ -368,6 +401,13 @@ def init(
         )
         if logs is None:
             logs = preset.get("logs")
+    else:
+        # An endpoint turns on every signal it serves. A preset decides for itself, since
+        # not every vendor takes all three. metrics=False and logs=False opt out.
+        if metrics is None and (endpoint or metrics_endpoint):
+            metrics = True
+        if logs is None and (endpoint or logs_endpoint):
+            logs = True
 
     # simple mode exports inside span.end(), so keep the wait short by default
     resolved_export_timeout = export_timeout
@@ -378,6 +418,9 @@ def init(
     if resolved_export_timeout is not None:
         exporter_timeout_kwargs["timeout"] = resolved_export_timeout
         processor_timeout_kwargs["export_timeout_millis"] = int(resolved_export_timeout * 1000)
+
+    set_redact_pii(redact_pii)
+    configure_log_output(service, log_file, json_logs)
 
     # Set up validation if provided
     if validation:
@@ -436,6 +479,7 @@ def init(
         attrs["deployment.environment"] = environment
     if resource_attributes:
         attrs.update(resource_attributes)
+    attrs[SERVICE_NAME] = env_config.get("service", attrs[SERVICE_NAME])
 
     autotel_resource = Resource(attributes=attrs)
     resource = resource.merge(autotel_resource) if resource is not None else autotel_resource
@@ -447,6 +491,7 @@ def init(
 
     # Build span processor pipeline (supports multiple processors/exporters)
     processors: list[SpanProcessor] = []
+    exporting: list[str] = []
 
     if span_processors:
         processors.extend(span_processors)
@@ -464,6 +509,8 @@ def init(
 
         if span_exporters:
             exporter_list.extend(span_exporters)
+        elif signal_disabled("traces"):
+            pass
         elif endpoint_was_explicitly_set or not debug_enabled:
             # Only create default OTLP exporter if:
             # 1. Endpoint was explicitly provided, OR
@@ -477,7 +524,7 @@ def init(
                 protocol = "http"
 
             trace_export_endpoint = traces_endpoint or endpoint
-            exporter_endpoint = _format_endpoint_url(trace_export_endpoint, "traces", protocol)
+            exporter_endpoint = _signal_url(env_config, "traces", trace_export_endpoint, protocol)
 
             # Create default exporter
             if protocol == "http":
@@ -500,6 +547,7 @@ def init(
                 )
 
             exporter_list.append(exporter)
+            exporting.append(f"traces to {exporter_endpoint}")
 
         for exporter_item in exporter_list:
             if span_processor_mode == "simple":
@@ -548,6 +596,7 @@ def init(
                 span_filter=span_filter,
                 span_name_normalizer=span_name_normalizer,
                 attribute_redactor=attribute_redactor,
+                redact_pii=redact_pii,
             )
         )
 
@@ -575,11 +624,9 @@ def init(
 
     meter_provider: MeterProvider | None = None
     resolved_metric_readers = list(metric_readers or [])
-    if metrics is True:
-        metric_exporter_endpoint = _format_endpoint_url(
-            metrics_endpoint or resolved_endpoint,
-            "metrics",
-            resolved_protocol,
+    if metrics is True and not signal_disabled("metrics"):
+        metric_exporter_endpoint = _signal_url(
+            env_config, "metrics", metrics_endpoint or resolved_endpoint, resolved_protocol
         )
         if resolved_protocol == "grpc":
             if GRPCMetricExporter is None:
@@ -602,21 +649,28 @@ def init(
         resolved_metric_readers.append(
             PeriodicExportingMetricReader(metric_exporter, **processor_timeout_kwargs)
         )
+        exporting.append(f"metrics to {metric_exporter_endpoint}")
 
     if resolved_metric_readers:
         meter_provider = MeterProvider(resource=resource, metric_readers=resolved_metric_readers)
-        otel_metrics.set_meter_provider(meter_provider)
+        # OpenTelemetry won't replace a meter provider that is already set, so a
+        # second init() swaps the global as it does for traces and logs.
+        if isinstance(otel_metrics.get_meter_provider(), MeterProvider):
+            from opentelemetry.metrics import _internal as otel_metrics_internal
+
+            with suppress(Exception):
+                otel_metrics_internal._METER_PROVIDER = meter_provider
+        else:
+            otel_metrics.set_meter_provider(meter_provider)
         from .shutdown import set_meter_provider_for_shutdown
 
         set_meter_provider_for_shutdown(meter_provider)
 
     logger_provider: LoggerProvider | None = None
     resolved_log_processors = list(log_record_processors or [])
-    if logs is True or logs == "auto":
-        log_exporter_endpoint = _format_endpoint_url(
-            logs_endpoint or resolved_endpoint,
-            "logs",
-            resolved_protocol,
+    if (logs is True or logs == "auto") and not signal_disabled("logs"):
+        log_exporter_endpoint = _signal_url(
+            env_config, "logs", logs_endpoint or resolved_endpoint, resolved_protocol
         )
         if resolved_protocol == "grpc":
             if GRPCLogExporter is None:
@@ -639,9 +693,12 @@ def init(
         resolved_log_processors.append(
             BatchLogRecordProcessor(log_exporter, **processor_timeout_kwargs)
         )
+        exporting.append(f"logs to {log_exporter_endpoint}")
 
     if resolved_log_processors:
         logger_provider = LoggerProvider(resource=resource)
+        if redact_pii:
+            logger_provider.add_log_record_processor(RedactPiiLogProcessor())
         for processor in resolved_log_processors:
             logger_provider.add_log_record_processor(processor)
         # OpenTelemetry won't replace a logger provider that is already set, so
@@ -746,3 +803,11 @@ def init(
 
     reset_shutdown_state()
     _INITIALIZED = True
+
+    if exporting:
+        destinations = ", ".join(
+            f"{signal} {redact_url(url)}" for signal, url in (d.rsplit(" ", 1) for d in exporting)
+        )
+        _logger.info("%s: exporting %s over %s", service, destinations, resolved_protocol)
+    elif not processors:
+        _logger.info("%s: nothing is exported. Set OTEL_EXPORTER_OTLP_ENDPOINT to export", service)

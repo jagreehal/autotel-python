@@ -20,7 +20,7 @@ from .business_baggage import (
 from .circuit_breaker import CircuitBreaker, CircuitState
 from .constants import AUTOTEL_DEBUG_BAGGAGE_KEY
 from .context import TraceContext
-from .db import instrument_database, trace_db_query
+from .db import instrument_database, sanitize_query, trace_db_query
 from .debug import (
     DebugPrinter,
     get_debug_printer,
@@ -48,6 +48,7 @@ from .gen_ai_events import (
     record_stream_first_token,
     record_tool_call,
 )
+from .gen_ai_metrics import GenAiMetrics, record_evaluation
 from .gen_ai_spans import execute_tool, invoke_agent
 from .helpers import (
     add_event,
@@ -60,9 +61,9 @@ from .helpers import (
     set_attributes,
     set_baggage_value,
 )
-from .http import http_instrumented, inject_trace_context, trace_http_request
+from .http import fetch, http_instrumented, inject_trace_context, trace_http_request
 from .init import init
-from .logging import Logger, instrument_logger
+from .logging import JsonWithTraceIds, LogFile, Logger, instrument_logger
 from .mcp import (
     McpInstrumentationConfig,
     McpTraceMeta,
@@ -126,11 +127,14 @@ from .operation_context import get_operation_context, run_in_operation_context
 from .pii_redaction import PIIRedactor
 from .processors import BatchSpanProcessor, SimpleSpanProcessor
 from .rate_limiter import RateLimiter
+from .redaction import RedactPiiLogProcessor, RedactPiiProcessor
 from .request_logger import RequestLogger, flatten_to_attributes, get_request_logger
-from .sampling import AdaptiveSampler, AdaptiveSamplingProcessor
+from .runtime_metrics import register_runtime_metrics
+from .sampling import AdaptiveSampler, AdaptiveSamplingProcessor, force_keep
 from .semantic_helpers import trace_db, trace_http, trace_llm, trace_messaging
 from .serverless import auto_flush_if_serverless, is_serverless, register_auto_flush
-from .shutdown import flush, shutdown, shutdown_sync
+from .shutdown import flush, install_signal_handlers, shutdown, shutdown_sync
+from .slo import BurnAlert, SloForecast, SloSnapshot, SloTracker
 from .span_processors import (
     AttributeRedactingProcessor,
     AttributeRedactorConfig,
@@ -222,6 +226,28 @@ except ImportError:
     autotelConfig = None  # type: ignore[assignment, misc]
 
 __all__ = [
+    # Redaction
+    "RedactPiiProcessor",
+    "RedactPiiLogProcessor",
+    # Logs
+    "LogFile",
+    "JsonWithTraceIds",
+    # Sampling
+    "force_keep",
+    # SLOs
+    "SloTracker",
+    "SloSnapshot",
+    "SloForecast",
+    "BurnAlert",
+    # Metrics helpers
+    "GenAiMetrics",
+    "record_evaluation",
+    "register_runtime_metrics",
+    # HTTP and database helpers
+    "fetch",
+    "sanitize_query",
+    # Lifecycle
+    "install_signal_handlers",
     # Core API
     "init",
     "trace",

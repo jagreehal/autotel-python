@@ -11,12 +11,20 @@ Supported loggers:
 - loguru
 """
 
+import json
 import logging
+import logging.handlers
+import os
+import sys
 from collections.abc import Callable
 from contextlib import suppress
-from typing import Any, Protocol
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Literal, Protocol
 
 from opentelemetry import trace
+
+from .redaction import redact_pii_enabled, scrub_text
 
 
 class Logger(Protocol):
@@ -41,6 +49,127 @@ class Logger(Protocol):
     def debug(self, msg: str, *args: Any, **kwargs: Any) -> None:
         """Log debug message."""
         ...
+
+
+LogRotation = Literal["minutely", "hourly", "daily", "never"]
+_ROTATION_WHEN = {"minutely": "M", "hourly": "H", "daily": "midnight"}
+
+
+@dataclass(frozen=True)
+class LogFile:
+    """
+    Rolling log files in ``directory``. Give each service its own directory.
+
+    ponytail: writes happen on the logging thread, so a slow disk slows the caller.
+    Add a QueueHandler if that shows up.
+
+    Args:
+        directory: Created if missing.
+        prefix: File name stem. Defaults to the service name.
+        rotation: ``minutely``, ``hourly``, ``daily`` or ``never``.
+        max_files: Files to keep: 2 or more, or 0 for all.
+        json: Write JSON lines with ``trace_id`` and ``span_id``.
+    """
+
+    directory: str | Path
+    prefix: str | None = None
+    rotation: LogRotation = "daily"
+    max_files: int = 7
+    json: bool = False
+
+    def __post_init__(self) -> None:
+        if self.rotation != "never" and self.rotation not in _ROTATION_WHEN:
+            raise ValueError(f"Unknown log rotation {self.rotation!r}")
+        if self.max_files == 1 or self.max_files < 0:
+            raise ValueError("max_files must be 2 or more, or 0 to keep all files")
+
+    def handler(self, service: str) -> logging.Handler:
+        directory = Path(self.directory)
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f"{self.prefix or service}.log"
+        if self.rotation == "never":
+            return logging.FileHandler(path, encoding="utf-8")
+        return logging.handlers.TimedRotatingFileHandler(
+            path,
+            when=_ROTATION_WHEN[self.rotation],
+            backupCount=max(self.max_files - 1, 0),
+            encoding="utf-8",
+        )
+
+
+def log_file_from_env() -> LogFile | None:
+    """Build a LogFile from ``AUTOTEL_LOG_FILE_{DIR,ROTATION,MAX_FILES}``."""
+    directory = os.getenv("AUTOTEL_LOG_FILE_DIR")
+    if not directory:
+        return None
+    rotation: Any = os.getenv("AUTOTEL_LOG_FILE_ROTATION", "daily").lower()
+    return LogFile(
+        directory, rotation=rotation, max_files=int(os.getenv("AUTOTEL_LOG_FILE_MAX_FILES", "7"))
+    )
+
+
+class JsonWithTraceIds(logging.Formatter):
+    """One JSON object per record, with the active ``trace_id`` and ``span_id``."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        entry: dict[str, Any] = {
+            "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": _message(record),
+        }
+        context = trace.get_current_span().get_span_context()
+        if context.is_valid:
+            entry["trace_id"] = format(context.trace_id, "032x")
+            entry["span_id"] = format(context.span_id, "016x")
+        if record.exc_info:
+            entry["exception"] = _scrubbed(self.formatException(record.exc_info))
+        return json.dumps(entry, default=str)
+
+
+class _ScrubbingFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        return _scrubbed(super().format(record))
+
+
+def _scrubbed(text: str) -> str:
+    return scrub_text(text) if redact_pii_enabled() else text
+
+
+def _message(record: logging.LogRecord) -> str:
+    return _scrubbed(record.getMessage())
+
+
+_output_handlers: list[logging.Handler] = []
+
+
+def configure_log_output(service: str, log_file: LogFile | None, json_logs: bool) -> None:
+    """Attach file and JSON stdout handlers to the root logger, replacing a previous init's."""
+    root = logging.getLogger()
+    while _output_handlers:
+        handler = _output_handlers.pop()
+        root.removeHandler(handler)
+        handler.close()
+
+    log_file = log_file or log_file_from_env()
+    if log_file is not None:
+        file_handler = log_file.handler(service)
+        file_handler.setFormatter(
+            JsonWithTraceIds()
+            if log_file.json
+            else _ScrubbingFormatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+        )
+        _output_handlers.append(file_handler)
+    if json_logs:
+        stdout_handler = logging.StreamHandler(sys.stdout)
+        stdout_handler.setFormatter(JsonWithTraceIds())
+        _output_handlers.append(stdout_handler)
+
+    for handler in _output_handlers:
+        root.addHandler(handler)
+    # The root default of WARNING would drop info records before any handler sees them.
+    if _output_handlers and root.level > logging.INFO:
+        root.setLevel(logging.INFO)
 
 
 def instrument_logger(logger: Any) -> None:

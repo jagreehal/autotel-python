@@ -27,7 +27,8 @@ init(service="checkout-api")
 
 **Configuration options:**
 - Environment variables: `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, etc.
-- Explicit parameters override env vars
+- `OTEL_*` variables override parameters, so deployments need no code change
+- An endpoint turns on traces, metrics and logs
 - Defaults to `http://localhost:4318`
 
 ### 2. Instrument code with `@trace`
@@ -199,7 +200,7 @@ def create_order():
 
 autotel automatically:
 - Creates spans for HTTP requests (via Flask instrumentation)
-- Adds semantic attributes (http.method, http.route, http.status_code)
+- Adds semantic attributes (http.request.method, http.route, http.response.status_code)
 - Tracks latency as metrics
 - Captures errors with stack traces
 - Propagates context to database calls
@@ -476,16 +477,16 @@ async def generate_response(ctx, prompt: str):
     )
 
     # Add token usage metrics
-    ctx.set_attribute("gen.ai.usage.completion_tokens", response.usage.completion_tokens)
-    ctx.set_attribute("gen.ai.usage.prompt_tokens", response.usage.prompt_tokens)
+    ctx.set_attribute("gen_ai.usage.completion_tokens", response.usage.completion_tokens)
+    ctx.set_attribute("gen_ai.usage.prompt_tokens", response.usage.prompt_tokens)
 
     return response.choices[0].message.content
 ```
 
 Automatically adds:
-- `gen.ai.request.model` - Model identifier
-- `gen.ai.operation.name` - Operation type (chat, completion, embedding)
-- `gen.ai.system` - AI system name (openai, anthropic, cohere)
+- `gen_ai.request.model` - Model identifier
+- `gen_ai.operation.name` - Operation type (chat, completion, embedding)
+- `gen_ai.system` - AI system name (openai, anthropic, cohere)
 
 Common use cases:
 - Chat completions with OpenAI, Anthropic Claude, Cohere
@@ -506,7 +507,7 @@ async def get_user_by_id(ctx, user_id: str):
     result = await conn.fetchrow("SELECT * FROM users WHERE id = $1", user_id)
 
     # Add query details (sanitized, no PII!)
-    ctx.set_attribute("db.statement", "SELECT * FROM users WHERE id = $1")
+    ctx.set_attribute("db.query.text", "SELECT * FROM users WHERE id = $1")
     ctx.set_attribute("db.collection.name", "users")
 
     return result
@@ -1111,7 +1112,11 @@ Standard logging records go through a handler on the logger you pass (or the roo
 
 ## Framework Integrations
 
-### FastAPI
+Each integration records a SERVER span joined to the caller's trace, with a bounded `http.route`, stable semantic-convention attributes and `http.server.request.duration`. A 5xx marks the span as an error; a 404 doesn't. An unmatched request stays named `GET`, so scanners can't mint a span name per URL.
+
+Install the extra for your framework: `pip install 'autotel[fastapi]'`, or `flask`, `django`, `grpc`.
+
+### FastAPI and Starlette
 
 ```python
 from fastapi import FastAPI
@@ -1119,6 +1124,12 @@ from autotel.integrations.fastapi import autotelMiddleware
 
 app = FastAPI()
 app.add_middleware(autotelMiddleware, service="my-api")
+```
+
+FastAPI 0.142 and later starts its own SERVER span and duration metric. Its `auto_configure` setting can also add OTLP exporters from the `OTEL_*` variables: 0.142 does this by default, and by 0.162 it's opt-in. The middleware adds to FastAPI's span instead of starting a second one, hides query values that FastAPI leaves in place, and turns those exporters off, because they would send everything twice and skip `redact_pii` and tail sampling. If you call `init()` without the middleware on a release that enables them, pass `FastAPI(telemetry={"auto_configure": False})` yourself. Because FastAPI's span starts first, `skip_routes` can't stop it there, so use FastAPI's setting:
+
+```python
+app = FastAPI(telemetry={"exclude": lambda scope: scope["path"] == "/health"})
 ```
 
 ### Django
@@ -1130,10 +1141,13 @@ MIDDLEWARE = [
     # ... other middleware
 ]
 
-autotel = {
+AUTOTEL = {
     "SERVICE_NAME": "my-django-app",
+    "SKIP_ROUTES": ["/health"],
 }
 ```
+
+The middleware works under WSGI and ASGI. `ENDPOINT`, `TRACE_RESPONSE_HEADER`, `TRUST_FORWARDED_FOR` and `RAW_QUERY` are optional, and `INIT` passes more arguments to `init()`.
 
 ### Flask
 
@@ -1142,8 +1156,68 @@ from flask import Flask
 from autotel.integrations.flask import init_autotel
 
 app = Flask(__name__)
-init_autotel(app, service="my-flask-app")
+init_autotel(app, service="my-flask-app", skip_routes=["/health"])
 ```
+
+### What the span records about the caller
+
+`url.query` keeps its keys and hides its values (`token=REDACTED&expand=REDACTED`), because query strings carry tokens and search terms. `raw_query=True` records them as sent.
+
+`client.address` is the TCP peer. Behind a proxy that sets `X-Forwarded-For`, pass `trust_forwarded_for=True` to use its first address and `X-Forwarded-Proto` for `url.scheme`. Keep it to that setup, because any client can send the headers. `trace_response_header=True` answers with `traceparent`, so a caller can quote the trace in a support ticket; it's off by default because it tells clients your trace ids.
+
+### gRPC
+
+```python
+from concurrent import futures
+
+import grpc
+from autotel.integrations.grpc import aio_server_interceptor, server_interceptor
+
+server = grpc.server(futures.ThreadPoolExecutor(), interceptors=[server_interceptor()])
+aio_server = grpc.aio.server(interceptors=[aio_server_interceptor()])
+```
+
+Each call gets a SERVER span named `package.Service/Method`, joined to the caller's trace, with `rpc.method`, `rpc.status_code` and `rpc.server.call.duration`. The span stays open for the whole stream. Only codes that are the server's fault (`INTERNAL`, `UNAVAILABLE` and so on) mark it as an error. An unknown method becomes `rpc.method: _OTHER` on a span named `grpc`.
+
+## Log Files
+
+```python
+from autotel import LogFile, init
+
+init(service="orders", log_file=LogFile("logs", rotation="hourly", max_files=24))
+```
+
+`rotation` is `minutely`, `hourly`, `daily` (the default) or `never`. `max_files` is 2 or more, or 0 to keep all files. `LogFile(..., json=True)` writes JSON lines with `trace_id` and `span_id`, and `init(json_logs=True)` prints the same lines to stdout. Give each service its own directory.
+
+## Shutdown
+
+`autotel` flushes at normal exit. A SIGTERM kills a bare Python process without running exit handlers, which loses the last batch, so workers and scripts should ask for a flush:
+
+```python
+from autotel import install_signal_handlers
+
+install_signal_handlers()
+```
+
+Servers like uvicorn and gunicorn handle SIGTERM themselves. Any handler you already installed still runs. In a Lambda handler, call `flush()` at the end.
+
+## SLOs
+
+```python
+from autotel import SloTracker
+
+short = SloTracker("checkout", target=0.999, window_seconds=300)
+long = SloTracker("checkout", target=0.999, window_seconds=3600)
+for tracker in (short, long):
+    tracker.record(response.status_code < 500)
+
+alert = SloTracker.evaluate(short.snapshot(), long.snapshot(), 14.4, 14.4)
+forecast = long.forecast(expected_events=1000, failure_fraction=0.01)
+```
+
+## Runtime and GenAI Metrics
+
+`register_runtime_metrics()` reports GC, CPU, thread and peak-memory metrics. `GenAiMetrics` records `gen_ai.client.operation.duration` and `gen_ai.client.token.usage`, and `record_evaluation(ctx, name, score, label)` attaches an evaluation score to a span.
 
 ## Configuration
 
@@ -1156,15 +1230,29 @@ export OTEL_SERVICE_NAME=my-app
 # OTLP endpoint
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 
-# Protocol (http or grpc)
-export OTEL_EXPORTER_OTLP_PROTOCOL=http
+# Protocol (http/protobuf or grpc). Anything else fails init().
+export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 
 # Headers (comma-separated key=value)
 export OTEL_EXPORTER_OTLP_HEADERS=api-key=secret123
 
 # Resource attributes (comma-separated key=value)
 export OTEL_RESOURCE_ATTRIBUTES=service.version=1.0.0,deployment.environment=production
+
+# Head sampling, read by the OpenTelemetry SDK
+export OTEL_TRACES_SAMPLER=parentbased_traceidratio
+
+# Silence one signal, for backends like Jaeger that take only traces
+export OTEL_METRICS_EXPORTER=none
+export OTEL_LOGS_EXPORTER=none
+
+# Rolling log files, no code needed
+export AUTOTEL_LOG_FILE_DIR=logs
+export AUTOTEL_LOG_FILE_ROTATION=daily   # minutely, hourly, daily or never
+export AUTOTEL_LOG_FILE_MAX_FILES=7      # 2 or more, or 0 for all
 ```
+
+These variables beat the values you pass to `init()`, so a deployment changes behaviour with no code change. A preset's endpoint is the exception: it stays on that vendor. Setting an endpoint turns on traces, metrics and logs; `metrics=False` or `logs=False` leaves one out. `init` logs where telemetry is going at `INFO` on the `autotel` logger. `docker compose up -d` starts Jaeger from this repository.
 
 Then just call `init()` with no parameters:
 
@@ -1275,18 +1363,21 @@ init(
 ### Adaptive Sampling
 
 ```python
-from autotel import init, AdaptiveSampler
+from autotel import AdaptiveSampler, force_keep, init
 
 init(
-    service="my-service",
-    sampler=AdaptiveSampler(
-        baseline_rate=0.1,  # 10% baseline
-        error_rate=1.0,  # 100% errors
-        slow_threshold_ms=1000,  # >1s is slow
-        slow_rate=1.0,  # 100% slow operations
-    ),
+    service="my-app",
+    sampler=AdaptiveSampler.production().keep_when("auth.success", lambda value: value is False),
 )
+
+force_keep()  # a payment, an audit event, a request you're debugging
 ```
+
+Sampling keeps or drops whole traces, so a dropped trace leaves no orphan spans. A trace is held until its local root and everything under it have ended. It's kept if any span failed, the root was slow, a `keep_when` rule matched, `force_keep()` ran, or the request carries `autotel.debug` baggage. Otherwise the trace id decides at `baseline_rate`.
+
+`AdaptiveSampler.production()` keeps errors, anything past one second and one in ten of the rest. `AdaptiveSampler.errors_only()` drops the baseline. A trace whose root hasn't ended within 30 seconds, or the oldest once 20,000 spans are held, exports as it stands.
+
+Each service decides on its own spans. For one decision across services, use the Collector's `tail_sampling` processor.
 
 ### Rate Limiting
 
@@ -1309,6 +1400,10 @@ breaker = CircuitBreaker(
 ```
 
 ### PII Redaction
+
+`init(service="my-app", redact_pii=True)` scrubs everything at export: span attributes, span events, exception text, logs and `track()` events. It removes emails, Luhn-valid card numbers, bearer tokens and values under keys like `password`, hides `url.query` values and URL credentials, and drops client IP attributes. `RedactPiiProcessor` does the same for a tracer provider you build yourself.
+
+For finer control over span attributes, use `attribute_redactor`, or `PIIRedactor` directly:
 
 ```python
 from autotel import PIIRedactor
@@ -1344,7 +1439,7 @@ async def fetch_data(url: str):
     with trace_http_request("GET", url) as ctx:
         headers = inject_trace_context()  # W3C Trace Context
         res = await httpx.get(url, headers=headers)
-        ctx.set_attribute("http.status_code", res.status_code)
+        ctx.set_attribute("http.response.status_code", res.status_code)
         return res.json()
 ```
 
@@ -1377,7 +1472,7 @@ db = instrument_database(
 
 # Manual tracing
 with trace_db_query("SELECT", "users", "postgresql") as ctx:
-    ctx.set_attribute("db.statement", query)
+    ctx.set_query_text(query)
     result = await db.execute(query)
 ```
 
