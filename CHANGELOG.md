@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-04
+
+### Added
+- `autotel.integrations.grpc`: `server_interceptor()` and `aio_server_interceptor()` record gRPC SERVER spans and `rpc.server.call.duration`, with the span open for the whole stream.
+- `init(redact_pii=True)` scrubs span attributes, span events, exception text, logs and `track()` events at export. `RedactPiiProcessor` does the same for your own tracer provider.
+- `init(log_file=LogFile("logs"))` and `AUTOTEL_LOG_FILE_{DIR,ROTATION,MAX_FILES}` write rolling log files. `init(json_logs=True)` prints JSON lines with `trace_id`.
+- `force_keep()`, `ctx.force_keep()`, `ctx.debug_requested()`, `AdaptiveSampler.production()`, `.errors_only()` and `.keep_when()`. `autotel.debug` baggage keeps a trace.
+- `http.server.request.duration`, `http.client.request.duration`, `db.client.operation.duration` and `rpc.server.call.duration`.
+- `fetch()`, `sanitize_query()`, `ctx.set_query_text()`, `install_signal_handlers()`, `SloTracker`, `GenAiMetrics`, `record_evaluation()`, `register_runtime_metrics()`, and `TraceCollector` in `autotel.testing`.
+- Server integrations gain `skip_routes`, `trace_response_header`, `trust_forwarded_for` and `raw_query`. `service` is optional once `init()` has run.
+- `OTEL_{TRACES,METRICS,LOGS}_EXPORTER=none` silences one signal, and `init` logs where telemetry goes.
+- `autotel[grpc]` extra, `SECURITY.md`, a `docker-compose.yml` with Jaeger, and the `autotel-python` agent skill.
+
+### Changed
+- **Breaking:** spans use stable semantic conventions. `http.method`, `http.url`, `http.status_code`, `db.system`, `db.name`, `db.operation`, `db.statement`, `db.sql.table` and `db.rows_affected` become `http.request.method`, `url.full`, `http.response.status_code`, `db.system.name`, `db.namespace`, `db.operation.name`, `db.query.text`, `db.collection.name` and `db.response.returned_rows`. `gen.ai.*` becomes `gen_ai.*`. Update dashboards and queries that read the old names.
+- **Breaking:** the FastAPI, Flask and Django integrations record SERVER spans with `url.path` and `url.query` in place of `http.url`, and drop `http.duration_ms`, `http.status_text`, `http.slow_request` and the raw path as `http.route`. A request that matches no route is named after its method only.
+- **Breaking:** HTTP client spans are named after the method (`GET`), as the conventions ask, and `url.full` has no credentials and hides query values.
+- **Breaking:** `AdaptiveSampler` decides per trace, not per span, from a hash of the trace id. Spans wait in memory until their trace finishes.
+- **Breaking:** an unknown `OTEL_EXPORTER_OTLP_PROTOCOL` now fails `init` rather than being ignored.
+- **Breaking:** `OTEL_*` variables beat arguments to `init()`, so a deployment changes behaviour with no code change. A preset's endpoint and protocol still win, so a preset stays on its vendor.
+- **Breaking:** setting an endpoint turns on traces, metrics and logs, and logs raise a root logger left at WARNING to INFO. Pass `metrics=False` or `logs=False`, or set `OTEL_METRICS_EXPORTER=none` and `OTEL_LOGS_EXPORTER=none` for trace-only backends like Jaeger. Presets decide for themselves.
+- Semantic helpers set a span kind: CLIENT for HTTP, database and LLM calls, PRODUCER or CONSUMER for messaging.
+- `autotel[fastapi]`, `[flask]` and `[django]` install the framework instead of `opentelemetry-instrumentation-*` packages that autotel never used.
+- Django reads the `AUTOTEL` setting. The documented lowercase `autotel` setting never worked, because Django ignores lowercase settings.
+- Dependencies upgraded to the latest releases (opentelemetry 1.45.2, pydantic 2.14.2, fastapi 0.162.0 and others), with `opentelemetry-*` and `pydantic` floors raised to match.
+- CI runs the integration tests, builds the package, audits dependencies and runs weekly.
+
+### Fixed
+- FastAPI 0.142+ no longer gets a duplicate span per request. The middleware adds to FastAPI's native SERVER span.
+- With the middleware, FastAPI's `auto_configure` (on by default in 0.142) no longer adds a second set of OTLP exporters, which sent everything twice and skipped `redact_pii` and tail sampling.
+- `OTEL_EXPORTER_OTLP_{TRACES,METRICS,LOGS}_ENDPOINT` are used as is, as the OTel spec says, with no `/v1/traces` appended. The `traces_endpoint=` style parameters still append it.
+- `OTEL_EXPORTER_OTLP_HEADERS` values are percent-decoded, so Grafana Cloud's `Authorization=Basic%20...` authenticates.
+- Server spans join the caller's trace on Flask and Django, and spans created in a handler are their children. The FastAPI middleware no longer uses `BaseHTTPMiddleware`, and it ends the span after a streamed response.
+- Flask and Django no longer end a span twice on an exception, and Flask no longer re-runs `init()` over the app's own setup.
+- `@trace_http`, `@trace_db` and `@trace_messaging` no longer raise `UnboundLocalError` on async functions without a `ctx` parameter.
+- `db.query.text` handles comments, double quotes, escapes and dollar quoting by dialect, and an unterminated string can't leak what follows it.
+- A second `init()` replaces the meter provider, as it does for traces and logs.
+
 ## [0.8.1] - 2026-10-03
 
 ### Fixed

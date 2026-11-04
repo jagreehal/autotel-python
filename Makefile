@@ -4,7 +4,7 @@ install:
 	uv pip install -e ".[dev]"
 
 test:
-	pytest tests/unit -v --cov=src --cov-report=term-missing
+	pytest tests -v --cov=src --cov-report=term-missing
 
 test-integration:
 	pytest tests/integration -v
@@ -19,10 +19,11 @@ verify-examples:
 	python scripts/verify_examples.py
 
 lint:
-	ruff check src tests
+	ruff check .
+	ruff format --check .
 
 format:
-	ruff format src tests
+	ruff format .
 
 type-check:
 	mypy src

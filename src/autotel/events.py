@@ -7,6 +7,7 @@ from typing import Any, Protocol
 from opentelemetry import trace
 
 from .circuit_breaker import CircuitBreaker
+from .redaction import redact_attributes, redact_pii_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +175,9 @@ class Event:
                         props["operation.name"] = span.name
                 except Exception:
                     pass  # Graceful degradation if name not available
+
+        if redact_pii_enabled():
+            props = redact_attributes(props)
 
         item: dict[str, Any] = {"name": event, "properties": props}
 

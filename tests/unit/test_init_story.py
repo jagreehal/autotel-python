@@ -122,7 +122,7 @@ def test_pydantic_ai_flag_instruments_all_agents_story(monkeypatch: Any) -> None
     assert FakeAgent.called is True
 
 
-def test_raw_otel_config_strings_can_be_reused_story() -> None:
+def test_raw_otel_config_strings_can_be_reused_story(monkeypatch: pytest.MonkeyPatch) -> None:
     story.init(
         "raw OTel header and resource strings can be reused directly",
         tags=["init", "migration", "otlp"],
@@ -145,6 +145,15 @@ def test_raw_otel_config_strings_can_be_reused_story() -> None:
     )
 
     story.when("autotel is initialized with those raw OTel strings")
+    captured: dict[str, str] = {}
+    init_module = sys.modules["autotel.init"]
+    real_exporter = init_module.HTTPExporter
+
+    def spy(*args: Any, headers: dict[str, str], **kwargs: Any) -> Any:
+        captured.update(headers)
+        return real_exporter(*args, headers=headers, **kwargs)
+
+    monkeypatch.setattr(init_module, "HTTPExporter", spy)
     init(
         service="story-migration",
         endpoint="http://collector:4318",
@@ -153,9 +162,8 @@ def test_raw_otel_config_strings_can_be_reused_story() -> None:
     )
 
     story.then("the exporter receives parsed headers")
-    exporter = _trace_exporter()
-    assert exporter._headers["authorization"] == "Bearer token"  # noqa: SLF001
-    assert exporter._headers["x-honeycomb-team"] == "abc123"  # noqa: SLF001
+    assert captured["authorization"] == "Bearer token"
+    assert captured["x-honeycomb-team"] == "abc123"
 
     story.and_("the resource keeps service metadata and custom attributes")
     provider = trace.get_tracer_provider()

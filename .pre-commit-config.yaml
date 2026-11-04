@@ -4,7 +4,7 @@
 repos:
   # Ruff - Fast Python linter and formatter
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.8
+    rev: v0.17.3
     hooks:
       # Run the linter
       - id: ruff
@@ -13,18 +13,19 @@ repos:
       - id: ruff-format
 
   # MyPy - Static type checker
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.13.0
+  # Local, so it sees the project's own dependencies and pyproject settings
+  - repo: local
     hooks:
       - id: mypy
-        additional_dependencies:
-          - types-all
-        args: [--config-file=pyproject.toml]
-        exclude: ^(tests/|examples/)
+        name: mypy
+        entry: mypy src
+        language: system
+        pass_filenames: false
+        types: [python]
 
   # General pre-commit hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       # File checks
       - id: check-yaml
@@ -49,7 +50,7 @@ repos:
 
   # Security checks
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.8.1
+    rev: 1.9.4
     hooks:
       - id: bandit
         args: [-c, pyproject.toml]

@@ -26,20 +26,20 @@ async def generate_chat_response(ctx, prompt: str) -> None:
     Example LLM operation with automatic Gen AI semantic conventions.
 
     Automatically adds:
-    - gen.ai.request.model: "gpt-4-turbo"
-    - gen.ai.operation.name: "chat"
-    - gen.ai.system: "openai"
+    - gen_ai.request.model: "gpt-4-turbo"
+    - gen_ai.operation.name: "chat"
+    - gen_ai.system: "openai"
     """
     # Simulate LLM API call
     await asyncio.sleep(0.1)
 
     # Add additional metrics (token usage, etc.)
-    ctx.set_attribute("gen.ai.usage.prompt_tokens", 50)
-    ctx.set_attribute("gen.ai.usage.completion_tokens", 120)
-    ctx.set_attribute("gen.ai.usage.total_tokens", 170)
-    ctx.set_attribute("gen.ai.request.temperature", 0.7)
-    ctx.set_attribute("gen.ai.request.max_tokens", 500)
-    ctx.set_attribute("gen.ai.prompt.length", len(prompt))
+    ctx.set_attribute("gen_ai.usage.prompt_tokens", 50)
+    ctx.set_attribute("gen_ai.usage.completion_tokens", 120)
+    ctx.set_attribute("gen_ai.usage.total_tokens", 170)
+    ctx.set_attribute("gen_ai.request.temperature", 0.7)
+    ctx.set_attribute("gen_ai.request.max_tokens", 500)
+    ctx.set_attribute("gen_ai.prompt.length", len(prompt))
 
     return "This is a simulated response from GPT-4"
 
@@ -50,16 +50,16 @@ async def embed_text(ctx, text: str) -> None:
     Example embedding operation.
 
     Automatically adds:
-    - gen.ai.request.model: "text-embedding-3-small"
-    - gen.ai.operation.name: "embedding"
-    - gen.ai.system: "openai"
+    - gen_ai.request.model: "text-embedding-3-small"
+    - gen_ai.operation.name: "embedding"
+    - gen_ai.system: "openai"
     """
     # Simulate embedding API call
     await asyncio.sleep(0.05)
 
-    ctx.set_attribute("gen.ai.usage.total_tokens", 8)
-    ctx.set_attribute("gen.ai.response.dimensions", 1536)
-    ctx.set_attribute("gen.ai.request.input_length", len(text))
+    ctx.set_attribute("gen_ai.usage.total_tokens", 8)
+    ctx.set_attribute("gen_ai.response.dimensions", 1536)
+    ctx.set_attribute("gen_ai.request.input_length", len(text))
 
     return [0.1, 0.2, 0.3]  # Simulated embedding vector
 
@@ -73,10 +73,10 @@ async def generate_with_claude(ctx, messages: list) -> None:
     """
     await asyncio.sleep(0.15)
 
-    ctx.set_attribute("gen.ai.usage.input_tokens", 100)
-    ctx.set_attribute("gen.ai.usage.output_tokens", 250)
-    ctx.set_attribute("gen.ai.request.max_tokens", 1000)
-    ctx.set_attribute("gen.ai.request.message_count", len(messages))
+    ctx.set_attribute("gen_ai.usage.input_tokens", 100)
+    ctx.set_attribute("gen_ai.usage.output_tokens", 250)
+    ctx.set_attribute("gen_ai.request.max_tokens", 1000)
+    ctx.set_attribute("gen_ai.request.message_count", len(messages))
 
     return "This is a simulated response from Claude"
 
@@ -286,7 +286,7 @@ async def process_user_request(ctx, user_id: str, prompt: str) -> None:
         return cached_response
 
     # 3. Generate LLM response (this is traced by the parent decorator)
-    ctx.set_attribute("gen.ai.usage.prompt_tokens", len(prompt.split()))
+    ctx.set_attribute("gen_ai.usage.prompt_tokens", len(prompt.split()))
     response = f"AI response for: {prompt}"
 
     # 4. Publish event

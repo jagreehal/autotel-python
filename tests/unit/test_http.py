@@ -21,17 +21,17 @@ def exporter() -> Any:
 def test_trace_http_request(exporter: Any) -> None:
     """Test manual HTTP request tracing."""
     with trace_http_request("GET", "https://api.example.com/users") as ctx:
-        ctx.set_attribute("http.status_code", 200)
+        ctx.set_attribute("http.response.status_code", 200)
 
     spans = exporter.get_finished_spans()
     assert len(spans) == 1
-    assert spans[0].name == "GET /users"
+    assert spans[0].name == "GET"
     assert spans[0].attributes is not None
-    assert spans[0].attributes.get("http.method") == "GET"
+    assert spans[0].attributes.get("http.request.method") == "GET"
     assert spans[0].attributes is not None
-    assert spans[0].attributes.get("http.url") == "https://api.example.com/users"
+    assert spans[0].attributes.get("url.full") == "https://api.example.com/users"
     assert spans[0].attributes is not None
-    assert spans[0].attributes.get("http.status_code") == 200
+    assert spans[0].attributes.get("http.response.status_code") == 200
 
 
 def test_inject_trace_context() -> None:
@@ -78,17 +78,8 @@ async def test_http_instrumented_class_decorator(exporter: Any) -> None:
 
     spans = exporter.get_finished_spans()
     assert len(spans) == 1
-    assert spans[0].name == "GET get_user"
+    assert spans[0].name == "GET"
     assert spans[0].attributes is not None
-    assert spans[0].attributes.get("http.method") == "GET"
+    assert spans[0].attributes.get("http.request.method") == "GET"
     assert spans[0].attributes is not None
-    assert spans[0].attributes.get("http.status_code") == 200
-
-
-def test_extract_path() -> None:
-    """Test URL path extraction."""
-    from autotel.http import _extract_path
-
-    assert _extract_path("https://api.example.com/users") == "/users"
-    assert _extract_path("https://api.example.com/users/123") == "/users/123"
-    assert _extract_path("https://api.example.com/") == "/"
+    assert spans[0].attributes.get("http.response.status_code") == 200

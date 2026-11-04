@@ -1,0 +1,12 @@
+# Local backend: `docker compose up -d`, then
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 python your_app.py
+# and open http://localhost:16686. Jaeger takes traces only, so leave `metrics` and
+# `logs` off, or set OTEL_METRICS_EXPORTER=none and OTEL_LOGS_EXPORTER=none.
+services:
+  jaeger:
+    image: cr.jaegertracing.io/jaegertracing/jaeger:2.22.0
+    container_name: jaeger
+    ports:
+      - "16686:16686"
+      - "${JAEGER_OTLP_GRPC_PORT:-4317}:4317"
+      - "${JAEGER_OTLP_HTTP_PORT:-4318}:4318"

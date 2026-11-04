@@ -10,6 +10,7 @@ For enhanced testing utilities:
 
 from .helpers import (
     AnalyticsCollector,
+    TraceCollector,
     assert_no_errors,
     assert_trace_created,
     assert_trace_duration,
@@ -24,6 +25,7 @@ from .helpers import (
 )
 
 __all__ = [
+    "TraceCollector",
     "assert_trace_created",
     "assert_trace_succeeded",
     "assert_trace_failed",

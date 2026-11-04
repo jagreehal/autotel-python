@@ -15,7 +15,7 @@ init(service="checkout-api")
 
 That's the whole happy path. `init()` reads the standard OTEL environment
 variables (`OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, …) and defaults
-the endpoint to `http://localhost:4318`. Explicit parameters override env vars.
+the endpoint to `http://localhost:4318`. `OTEL_*` variables override parameters, except a preset's endpoint. Setting an endpoint turns on traces, metrics and logs.
 
 ```python
 # Point at a collector / backend
@@ -88,7 +88,7 @@ you use it; defaults stay sensible and quiet.
 
 | Parameter | Default | Purpose |
 |---|---|---|
-| `sampler` | — | An `AdaptiveSampler` for tail/adaptive sampling. |
+| `sampler` | — | An `AdaptiveSampler`, which keeps or drops whole traces. See `AdaptiveSampler.production()`, `.errors_only()` and `.keep_when()`. |
 
 ### Span transforms
 
@@ -97,6 +97,9 @@ you use it; defaults stay sensible and quiet.
 | `span_filter` | — | Predicate `(span) -> bool`; return `True` to keep a completed span. |
 | `span_name_normalizer` | — | Normalize span names (callable or preset: `rest-api`, `graphql`, `minimal`). |
 | `attribute_redactor` | — | PII/attribute redaction (config, preset `default`/`strict`/`pci-dss`, or callable). |
+| `redact_pii` | `False` | Scrub span attributes, span events, logs and `track()` events at export, and drop client IPs. |
+| `log_file` | — | Rolling log files, e.g. `LogFile("logs", rotation="hourly")`. `AUTOTEL_LOG_FILE_DIR` turns this on with no code. |
+| `json_logs` | `False` | Print JSON lines with `trace_id` and `span_id` to stdout. |
 
 ### Export pipeline (low-level)
 
