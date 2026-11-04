@@ -31,7 +31,8 @@ init(service="my-app", endpoint="http://localhost:4318")
 
 **Configuration options:**
 - Environment variables: `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, etc.
-- Explicit parameters override env vars
+- `OTEL_*` variables override parameters, so deployments need no code change
+- An endpoint turns on traces, metrics and logs
 - HTTP endpoints are normalized to `/v1/traces`, `/v1/metrics`, and `/v1/logs`
 - Defaults to `http://localhost:4318`
 
@@ -237,7 +238,7 @@ from autotel import trace_llm, trace_db, trace_http
 @trace_llm(model="gpt-4-turbo", operation="chat", system="openai")
 async def generate_response(ctx, prompt: str):
     response = await openai.chat.completions.create(...)
-    ctx.set_attribute("gen.ai.usage.prompt_tokens", response.usage.prompt_tokens)
+    ctx.set_attribute("gen_ai.usage.prompt_tokens", response.usage.prompt_tokens)
     return response
 
 
@@ -310,7 +311,7 @@ MIDDLEWARE = [
     # ... other middleware
 ]
 
-autotel = {
+AUTOTEL = {
     "SERVICE_NAME": "my-django-app",
     "ENDPOINT": "http://localhost:4318",
 }

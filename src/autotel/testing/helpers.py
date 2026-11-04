@@ -289,3 +289,56 @@ async def wait_for_trace(
             return True
         await asyncio.sleep(0.1)
     return False
+
+
+class TraceCollector:
+    """
+    Initialize autotel against memory and assert on what was recorded.
+
+    Example:
+        >>> collector = TraceCollector("orders")
+        >>> create_order()
+        >>> span = collector.expect_span("order.create")
+        >>> assert collector.descendants(span)
+    """
+
+    def __init__(self, service: str = "test") -> None:
+        from .. import init
+        from ..exporters import InMemorySpanExporter
+        from ..processors import SimpleSpanProcessor
+
+        self.exporter = InMemorySpanExporter()
+        init(service=service, span_processor=SimpleSpanProcessor(self.exporter))
+
+    def spans(self) -> list[Any]:
+        return list(self.exporter.get_finished_spans())
+
+    def by_name(self, name: str) -> list[Any]:
+        return [span for span in self.spans() if span.name == name]
+
+    def expect_span(self, name: str) -> Any:
+        """The span called ``name``. Fails with the names that were recorded."""
+        found = self.by_name(name)
+        if not found:
+            names = [span.name for span in self.spans()]
+            raise AssertionError(f"No span named {name!r}. Recorded: {names}")
+        return found[0]
+
+    def by_attributes(self, expected: dict[str, Any]) -> list[Any]:
+        return [
+            span
+            for span in self.spans()
+            if all((span.attributes or {}).get(key) == value for key, value in expected.items())
+        ]
+
+    def descendants(self, parent: Any) -> list[Any]:
+        """Every span under ``parent``, however deep."""
+        found: list[Any] = []
+        frontier = {parent.context.span_id}
+        remaining = self.spans()
+        while frontier:
+            children = [s for s in remaining if s.parent and s.parent.span_id in frontier]
+            remaining = [s for s in remaining if s not in children]
+            found += children
+            frontier = {s.context.span_id for s in children}
+        return found

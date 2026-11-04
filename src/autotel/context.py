@@ -7,6 +7,12 @@ from opentelemetry.baggage import propagation
 from opentelemetry.propagate import inject
 from opentelemetry.trace import Link, Span, SpanContext, StatusCode
 
+from .constants import (
+    AUTOTEL_DEBUG_BAGGAGE_KEY,
+    AUTOTEL_SAMPLING_TAIL_EVALUATED,
+    AUTOTEL_SAMPLING_TAIL_KEEP,
+)
+
 # OpenTelemetry attribute value types - primitives and homogeneous sequences
 AttributeValue = (
     str | int | float | bool | Sequence[str] | Sequence[int] | Sequence[float] | Sequence[bool]
@@ -47,6 +53,23 @@ class TraceContext:
     ) -> None:
         """Add a span event."""
         self._span.add_event(name, attributes or {})
+
+    def set_query_text(self, sql: str) -> None:
+        """Record ``db.query.text`` with literals removed, in this span's SQL dialect."""
+        from .db import sanitize_query
+
+        attributes = getattr(self._span, "attributes", None) or {}
+        system = attributes.get("db.system.name", "")
+        self._span.set_attribute("db.query.text", sanitize_query(sql, str(system)))
+
+    def force_keep(self) -> None:
+        """Keep this trace whatever the sampler decides."""
+        self._span.set_attribute(AUTOTEL_SAMPLING_TAIL_EVALUATED, True)
+        self._span.set_attribute(AUTOTEL_SAMPLING_TAIL_KEEP, True)
+
+    def debug_requested(self) -> bool:
+        """True when the request in flight asked for full-fidelity capture."""
+        return self.get_baggage(AUTOTEL_DEBUG_BAGGAGE_KEY) not in (None, "", "0")
 
     def set_status(self, code: StatusCode, description: str | None = None) -> None:
         """Set span status."""

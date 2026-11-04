@@ -1,9 +1,24 @@
-"""Adaptive sampling for autotel."""
+"""Adaptive sampling for autotel.
 
-import random
+Process-local tail sampling: every span of a trace is held until its local root
+(no parent, or a remote one) and everything started under it have ended, then the
+whole trace is kept or dropped, so a dropped trace leaves no orphan spans. Each
+service decides alone; for one decision across services, run the Collector's
+``tail_sampling`` processor.
+
+Fail-open: a trace whose root has not ended within 30s, or the oldest trace once
+20,000 spans are held, is exported as it stands.
+"""
+
+import hashlib
+import threading
+import time
+from collections import OrderedDict
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import Any
 
-from opentelemetry import trace
+from opentelemetry import baggage, trace
 from opentelemetry.context import Context
 from opentelemetry.sdk.trace import SpanProcessor
 from opentelemetry.sdk.trace.export import ReadableSpan as ReadWriteSpan
@@ -12,6 +27,29 @@ from opentelemetry.sdk.trace.sampling import (
     TraceIdRatioBased,
 )
 from opentelemetry.trace import StatusCode
+
+from .constants import (
+    AUTOTEL_DEBUG_BAGGAGE_KEY,
+    AUTOTEL_SAMPLING_TAIL_EVALUATED,
+    AUTOTEL_SAMPLING_TAIL_KEEP,
+)
+
+_MAX_BUFFERED_SPANS = 20_000
+_TRACE_TIMEOUT_SECONDS = 30.0
+_MAX_DECIDED_TRACES = 10_000
+
+
+def _hash_unit_interval(trace_id: int, salt: str = "") -> float:
+    """Map a trace id to [0, 1), so every span and processor reaches the same verdict."""
+    digest = hashlib.sha256(f"{salt}{trace_id:032x}".encode()).digest()
+    return int.from_bytes(digest[:8], "big") / 2**64
+
+
+def force_keep() -> None:
+    """Keep the current trace whatever the sampler decides: a payment, an audit event."""
+    span = trace.get_current_span()
+    span.set_attribute(AUTOTEL_SAMPLING_TAIL_EVALUATED, True)
+    span.set_attribute(AUTOTEL_SAMPLING_TAIL_KEEP, True)
 
 
 class AdaptiveSampler:
@@ -63,10 +101,26 @@ class AdaptiveSampler:
         self.slow_rate = slow_rate
         self.links_based = links_based
         self.links_rate = links_rate
+        self._keep_rules: list[tuple[str, Callable[[Any], bool]]] = []
 
         # Use ParentBased sampler with high ratio to sample everything initially
         # We'll do tail sampling in the processor
         self._head_sampler = ParentBased(root=TraceIdRatioBased(1.0))
+
+    @classmethod
+    def production(cls) -> "AdaptiveSampler":
+        """Errors, anything past one second, and one in ten of the rest."""
+        return cls(baseline_rate=0.1, slow_threshold_ms=1000)
+
+    @classmethod
+    def errors_only(cls) -> "AdaptiveSampler":
+        """Only failures and slow traces survive."""
+        return cls(baseline_rate=0.0, slow_threshold_ms=1000)
+
+    def keep_when(self, key: str, predicate: Callable[[Any], bool]) -> "AdaptiveSampler":
+        """Keep every trace with a span whose ``key`` attribute matches ``predicate``."""
+        self._keep_rules.append((key, predicate))
+        return self
 
     def get_sampler(self) -> Any:
         """Get the OpenTelemetry sampler instance."""
@@ -91,43 +145,58 @@ class AdaptiveSampler:
 
         return any(link.context and link.context.trace_flags.sampled for link in links)
 
-    def should_keep_span(self, span: ReadWriteSpan) -> bool:
-        """
-        Determine if a span should be kept after completion (tail sampling).
+    def _matches_rule(self, span: ReadWriteSpan) -> bool:
+        attributes = span.attributes or {}
+        return any(key in attributes and rule(attributes[key]) for key, rule in self._keep_rules)
 
-        This is called by AdaptiveSamplingProcessor after span ends.
+    def _is_slow(self, span: ReadWriteSpan) -> bool:
+        if span.end_time is None or span.start_time is None:
+            return False
+        return (span.end_time - span.start_time) / 1_000_000 > self.slow_threshold_ms
+
+    def should_keep_span(self, span: ReadWriteSpan) -> bool:
+        """Decide one span as if it were a whole trace."""
+        return self.should_keep_trace(span, [span])
+
+    def should_keep_trace(self, root: ReadWriteSpan, spans: list[ReadWriteSpan]) -> bool:
+        """
+        Decide a trace from its local root and every span this process recorded for it.
 
         Args:
-            span: The completed span
+            root: The trace's local root span
+            spans: All of the trace's spans, root included
 
         Returns:
-            True if span should be kept, False if it should be dropped
+            True if the trace should be kept, False if it should be dropped
         """
-        # Always keep errors
-        if span.status.status_code == StatusCode.ERROR:
+        attributes = [span.attributes or {} for span in spans]
+        if any(item.get(AUTOTEL_SAMPLING_TAIL_KEEP) is True for item in attributes):
+            return True
+        if any(span.status.status_code == StatusCode.ERROR for span in spans):
+            return True
+        if any(self._matches_rule(span) for span in spans) or self._is_slow(root):
             return True
 
-        # Check if span is slow
-        if span.end_time is not None and span.start_time is not None:
-            duration_ms = (
-                span.end_time - span.start_time
-            ) / 1_000_000  # nanoseconds to milliseconds
-            if duration_ms > self.slow_threshold_ms:
-                return True
+        trace_id = root.context.trace_id
+        # Links-based sampling for event-driven systems
+        if self.links_based and any(self._has_sampled_link(span) for span in spans):
+            return _hash_unit_interval(trace_id, "links") < self.links_rate
 
-        # Check for sampled links (links-based sampling for event-driven systems)
-        if self.links_based and self._has_sampled_link(span):
-            return bool(random.random() < self.links_rate)
+        return _hash_unit_interval(trace_id) < self.baseline_rate
 
-        # For successful, fast operations: use baseline rate
-        return bool(random.random() < self.baseline_rate)
+
+@dataclass
+class _PendingTrace:
+    deadline: float
+    spans: list[ReadWriteSpan] = field(default_factory=list)
+    open: int = 0
+    root: ReadWriteSpan | None = None
+    keep: bool = False
 
 
 class AdaptiveSamplingProcessor(SpanProcessor):
     """
-    Span processor that implements tail sampling using AdaptiveSampler.
-
-    This processor drops spans after they complete based on the adaptive sampling rules.
+    Span processor that keeps or drops whole traces using AdaptiveSampler.
 
     Subclasses ``SpanProcessor`` so it inherits the full processor protocol
     (including the internal ``_on_ending`` hook the SDK invokes on every
@@ -144,30 +213,90 @@ class AdaptiveSamplingProcessor(SpanProcessor):
         """
         self.sampler = sampler
         self.next_processor = next_processor
+        self._lock = threading.Lock()
+        # Insertion order is creation order, so deadlines ascend.
+        self._pending: OrderedDict[int, _PendingTrace] = OrderedDict()
+        self._decided: OrderedDict[int, bool] = OrderedDict()
+        self._buffered = 0
+
+    def _trace(self, trace_id: int) -> _PendingTrace:
+        pending = self._pending.get(trace_id)
+        if pending is None:
+            pending = _PendingTrace(deadline=time.monotonic() + _TRACE_TIMEOUT_SECONDS)
+            self._pending[trace_id] = pending
+        return pending
+
+    def _decide(self, trace_id: int, *, fail_open: bool = False) -> list[ReadWriteSpan]:
+        """Remove a trace from the buffer and return its spans if kept."""
+        pending = self._pending.pop(trace_id)
+        self._buffered -= len(pending.spans)
+        keep = fail_open or pending.keep
+        if not keep and pending.root is not None:
+            keep = self.sampler.should_keep_trace(pending.root, pending.spans)
+        self._decided[trace_id] = keep
+        if len(self._decided) > _MAX_DECIDED_TRACES:
+            self._decided.popitem(last=False)
+        return pending.spans if keep else []
+
+    def _sweep(self) -> list[ReadWriteSpan]:
+        """Decide traces past their deadline, or beyond the buffer limit, oldest first."""
+        released: list[ReadWriteSpan] = []
+        now = time.monotonic()
+        while self._pending:
+            trace_id, oldest = next(iter(self._pending.items()))
+            if oldest.deadline > now and self._buffered <= _MAX_BUFFERED_SPANS:
+                break
+            released += self._decide(trace_id, fail_open=oldest.root is None)
+        return released
 
     def on_start(self, span: ReadWriteSpan, parent_context: Context | None = None) -> None:
-        """Called when a span starts."""
-        if hasattr(self.next_processor, "on_start"):
-            self.next_processor.on_start(span, parent_context)
+        """Count the span open, and honour an ``autotel.debug`` baggage request."""
+        requested = baggage.get_baggage(AUTOTEL_DEBUG_BAGGAGE_KEY, parent_context)
+        with self._lock:
+            trace_id = span.context.trace_id
+            if trace_id not in self._decided:
+                pending = self._trace(trace_id)
+                pending.open += 1
+                pending.keep = pending.keep or requested not in (None, "", "0")
+        self.next_processor.on_start(span, parent_context)
 
     def on_end(self, span: ReadWriteSpan) -> None:
-        """Called when a span ends - implement tail sampling here."""
-        # Check if we should keep this span
-        if self.sampler.should_keep_span(span):
-            # Keep the span - pass to next processor
-            self.next_processor.on_end(span)
-        # Otherwise, drop the span silently
+        """Hold the span until its trace is decided."""
+        trace_id = span.context.trace_id
+        with self._lock:
+            verdict = self._decided.get(trace_id)
+            if verdict is not None:
+                released = [span] if verdict else []
+            else:
+                pending = self._trace(trace_id)
+                pending.spans.append(span)
+                self._buffered += 1
+                # A span started before this processor existed was never counted.
+                pending.open = max(pending.open - 1, 0)
+                if span.parent is None or span.parent.is_remote:
+                    pending.root = span
+                released = []
+                if pending.root is not None and pending.open == 0:
+                    released = self._decide(trace_id)
+                released += self._sweep()
+        for finished in released:
+            self.next_processor.on_end(finished)
 
     def shutdown(self) -> None:
-        """Shutdown the processor."""
-        if hasattr(self.next_processor, "shutdown"):
-            self.next_processor.shutdown()
+        """Decide everything: nothing more will end. Rootless traces export as they stand."""
+        with self._lock:
+            released: list[ReadWriteSpan] = []
+            for trace_id, pending in list(self._pending.items()):
+                released += self._decide(trace_id, fail_open=pending.root is None)
+            self._decided.clear()
+        for finished in released:
+            self.next_processor.on_end(finished)
+        self.next_processor.shutdown()
 
     def force_flush(self, timeout_millis: int = 30000) -> bool:
-        """Force flush pending spans."""
-        if hasattr(self.next_processor, "force_flush"):
-            return self.next_processor.force_flush(timeout_millis)  # type: ignore[no-any-return]
-        return True
+        """Flush decided spans. A trace waiting on running children stays pending,
+        because deciding it now would miss a late error or ``force_keep()``."""
+        return self.next_processor.force_flush(timeout_millis)  # type: ignore[no-any-return]
 
 
 def create_link_from_headers(

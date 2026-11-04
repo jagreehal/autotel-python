@@ -10,14 +10,27 @@ from collections.abc import Callable
 from typing import Any, ParamSpec, TypeVar
 
 from opentelemetry import trace as otel_trace
-from opentelemetry.trace import StatusCode
+from opentelemetry.trace import SpanKind, StatusCode
 
 from .context import TraceContext
 from .decorators import CTX_PARAM_NAMES, _rewrite_signature_without_ctx
+from .instruments import measured, record_db_operation, record_http_client
 from .operation_context import run_in_operation_context
+from .redaction import redact_url
 
 P = ParamSpec("P")
 R = TypeVar("R")
+
+_PRODUCER_OPERATIONS = frozenset({"create", "publish", "send"})
+_CONSUMER_OPERATIONS = frozenset({"consume", "deliver", "process", "receive"})
+
+
+def _messaging_kind(operation: str | None) -> SpanKind:
+    if operation in _PRODUCER_OPERATIONS:
+        return SpanKind.PRODUCER
+    if operation in _CONSUMER_OPERATIONS:
+        return SpanKind.CONSUMER
+    return SpanKind.CLIENT
 
 
 def trace_llm(
@@ -35,9 +48,9 @@ def trace_llm(
     like OpenAI, Anthropic, Cohere, etc.
 
     Semantic conventions automatically added:
-    - gen.ai.request.model: The model identifier (e.g., "gpt-4-turbo", "claude-3-opus")
-    - gen.ai.operation.name: The operation type (e.g., "chat", "completion", "embedding")
-    - gen.ai.system: The AI system name (e.g., "openai", "anthropic")
+    - gen_ai.request.model: The model identifier (e.g., "gpt-4-turbo", "claude-3-opus")
+    - gen_ai.operation.name: The operation type (e.g., "chat", "completion", "embedding")
+    - gen_ai.system: The AI system name (e.g., "openai", "anthropic")
 
     Args:
         model: Model identifier (e.g., "gpt-4-turbo", "claude-3-opus")
@@ -64,9 +77,9 @@ def trace_llm(
         ...         messages=[{"role": "user", "content": prompt}]
         ...     )
         ...     # Add token usage metrics
-        ...     ctx.set_attribute("gen.ai.usage.completion_tokens",
+        ...     ctx.set_attribute("gen_ai.usage.completion_tokens",
         ...                       response.usage.completion_tokens)
-        ...     ctx.set_attribute("gen.ai.usage.prompt_tokens",
+        ...     ctx.set_attribute("gen_ai.usage.prompt_tokens",
         ...                       response.usage.prompt_tokens)
         ...     return response.choices[0].message.content
 
@@ -79,10 +92,10 @@ def trace_llm(
         ...     )
 
     Best Practices:
-        - Add token usage with gen.ai.usage.* attributes
-        - Add request/response metadata with gen.ai.request.* and gen.ai.response.*
-        - Add cost tracking with gen.ai.usage.cost if available
-        - Consider adding gen.ai.request.temperature, gen.ai.request.max_tokens, etc.
+        - Add token usage with gen_ai.usage.* attributes
+        - Add request/response metadata with gen_ai.request.* and gen_ai.response.*
+        - Add cost tracking with gen_ai.usage.cost if available
+        - Consider adding gen_ai.request.temperature, gen_ai.request.max_tokens, etc.
     """
 
     def decorator(func: Callable[P, R]) -> Callable[P, R]:
@@ -101,14 +114,14 @@ def trace_llm(
                 tracer = otel_trace.get_tracer(__name__)
                 with (
                     run_in_operation_context(span_name),
-                    tracer.start_as_current_span(span_name) as span,
+                    tracer.start_as_current_span(span_name, kind=SpanKind.CLIENT) as span,
                 ):
                     try:
                         # Add semantic convention attributes
-                        span.set_attribute("gen.ai.request.model", model)
-                        span.set_attribute("gen.ai.operation.name", operation)
+                        span.set_attribute("gen_ai.request.model", model)
+                        span.set_attribute("gen_ai.operation.name", operation)
                         if system:
-                            span.set_attribute("gen.ai.system", system)
+                            span.set_attribute("gen_ai.system", system)
 
                         # Add custom attributes if provided
                         if attributes:
@@ -139,14 +152,14 @@ def trace_llm(
                 tracer = otel_trace.get_tracer(__name__)
                 with (
                     run_in_operation_context(span_name),
-                    tracer.start_as_current_span(span_name) as span,
+                    tracer.start_as_current_span(span_name, kind=SpanKind.CLIENT) as span,
                 ):
                     try:
                         # Add semantic convention attributes
-                        span.set_attribute("gen.ai.request.model", model)
-                        span.set_attribute("gen.ai.operation.name", operation)
+                        span.set_attribute("gen_ai.request.model", model)
+                        span.set_attribute("gen_ai.operation.name", operation)
                         if system:
-                            span.set_attribute("gen.ai.system", system)
+                            span.set_attribute("gen_ai.system", system)
 
                         # Add custom attributes if provided
                         if attributes:
@@ -214,7 +227,7 @@ def trace_db(
         >>> async def get_user(ctx, user_id: str):
         ...     conn = await asyncpg.connect(DATABASE_URL)
         ...     # Add query details
-        ...     ctx.set_attribute("db.statement", "SELECT * FROM users WHERE id = $1")
+        ...     ctx.set_attribute("db.query.text", "SELECT * FROM users WHERE id = $1")
         ...     ctx.set_attribute("db.collection.name", "users")
         ...     result = await conn.fetchrow("SELECT * FROM users WHERE id = $1", user_id)
         ...     await conn.close()
@@ -260,15 +273,24 @@ def trace_db(
                 tracer = otel_trace.get_tracer(__name__)
                 with (
                     run_in_operation_context(span_name),
-                    tracer.start_as_current_span(span_name) as span,
+                    tracer.start_as_current_span(span_name, kind=SpanKind.CLIENT) as span,
+                    measured(
+                        record_db_operation,
+                        {
+                            "db.system.name": system,
+                            "db.operation.name": operation,
+                            "db.namespace": db_name,
+                            "db.collection.name": collection,
+                        },
+                    ),
                 ):
                     try:
                         # Add semantic convention attributes
-                        span.set_attribute("db.system", system)
+                        span.set_attribute("db.system.name", system)
                         if operation:
-                            span.set_attribute("db.operation", operation)
+                            span.set_attribute("db.operation.name", operation)
                         if db_name:
-                            span.set_attribute("db.name", db_name)
+                            span.set_attribute("db.namespace", db_name)
                         if collection:
                             span.set_attribute("db.collection.name", collection)
 
@@ -283,9 +305,9 @@ def trace_db(
                         if needs_ctx:
                             ctx = TraceContext(span)
                             result = await func(ctx, *args, **kwargs)  # type: ignore[arg-type]
-                        return result  # type: ignore[no-any-return]
+                            return result  # type: ignore[no-any-return]
                         result = await func(*args, **kwargs)
-                        return result
+                        return result  # type: ignore[no-any-return]
                     except Exception as e:
                         span.record_exception(e)
                         span.set_status(StatusCode.ERROR, str(e))
@@ -301,15 +323,24 @@ def trace_db(
                 tracer = otel_trace.get_tracer(__name__)
                 with (
                     run_in_operation_context(span_name),
-                    tracer.start_as_current_span(span_name) as span,
+                    tracer.start_as_current_span(span_name, kind=SpanKind.CLIENT) as span,
+                    measured(
+                        record_db_operation,
+                        {
+                            "db.system.name": system,
+                            "db.operation.name": operation,
+                            "db.namespace": db_name,
+                            "db.collection.name": collection,
+                        },
+                    ),
                 ):
                     try:
                         # Add semantic convention attributes
-                        span.set_attribute("db.system", system)
+                        span.set_attribute("db.system.name", system)
                         if operation:
-                            span.set_attribute("db.operation", operation)
+                            span.set_attribute("db.operation.name", operation)
                         if db_name:
-                            span.set_attribute("db.name", db_name)
+                            span.set_attribute("db.namespace", db_name)
                         if collection:
                             span.set_attribute("db.collection.name", collection)
 
@@ -415,14 +446,15 @@ def trace_http(
                 tracer = otel_trace.get_tracer(__name__)
                 with (
                     run_in_operation_context(span_name),
-                    tracer.start_as_current_span(span_name) as span,
+                    tracer.start_as_current_span(span_name, kind=SpanKind.CLIENT) as span,
+                    measured(record_http_client, {"http.request.method": method}),
                 ):
                     try:
                         # Add semantic convention attributes
                         if method:
                             span.set_attribute("http.request.method", method)
                         if url:
-                            span.set_attribute("url.full", url)
+                            span.set_attribute("url.full", redact_url(url))
 
                         # Add custom attributes if provided
                         if attributes:
@@ -435,9 +467,9 @@ def trace_http(
                         if needs_ctx:
                             ctx = TraceContext(span)
                             result = await func(ctx, *args, **kwargs)  # type: ignore[arg-type]
-                        return result  # type: ignore[no-any-return]
+                            return result  # type: ignore[no-any-return]
                         result = await func(*args, **kwargs)
-                        return result
+                        return result  # type: ignore[no-any-return]
                     except Exception as e:
                         span.record_exception(e)
                         span.set_status(StatusCode.ERROR, str(e))
@@ -453,14 +485,15 @@ def trace_http(
                 tracer = otel_trace.get_tracer(__name__)
                 with (
                     run_in_operation_context(span_name),
-                    tracer.start_as_current_span(span_name) as span,
+                    tracer.start_as_current_span(span_name, kind=SpanKind.CLIENT) as span,
+                    measured(record_http_client, {"http.request.method": method}),
                 ):
                     try:
                         # Add semantic convention attributes
                         if method:
                             span.set_attribute("http.request.method", method)
                         if url:
-                            span.set_attribute("url.full", url)
+                            span.set_attribute("url.full", redact_url(url))
 
                         # Add custom attributes if provided
                         if attributes:
@@ -583,7 +616,9 @@ def trace_messaging(
                 tracer = otel_trace.get_tracer(__name__)
                 with (
                     run_in_operation_context(span_name),
-                    tracer.start_as_current_span(span_name) as span,
+                    tracer.start_as_current_span(
+                        span_name, kind=_messaging_kind(operation)
+                    ) as span,
                 ):
                     try:
                         # Add semantic convention attributes
@@ -604,9 +639,9 @@ def trace_messaging(
                         if needs_ctx:
                             ctx = TraceContext(span)
                             result = await func(ctx, *args, **kwargs)  # type: ignore[arg-type]
-                        return result  # type: ignore[no-any-return]
+                            return result  # type: ignore[no-any-return]
                         result = await func(*args, **kwargs)
-                        return result
+                        return result  # type: ignore[no-any-return]
                     except Exception as e:
                         span.record_exception(e)
                         span.set_status(StatusCode.ERROR, str(e))
@@ -622,7 +657,9 @@ def trace_messaging(
                 tracer = otel_trace.get_tracer(__name__)
                 with (
                     run_in_operation_context(span_name),
-                    tracer.start_as_current_span(span_name) as span,
+                    tracer.start_as_current_span(
+                        span_name, kind=_messaging_kind(operation)
+                    ) as span,
                 ):
                     try:
                         # Add semantic convention attributes

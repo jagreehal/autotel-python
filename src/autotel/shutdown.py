@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import signal
+import threading
+from collections.abc import Iterable
+from types import FrameType
 
 from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk.metrics import MeterProvider
@@ -78,6 +83,43 @@ def flush(timeout: float = 5.0) -> None:
             target.force_flush(timeout_millis=timeout_millis)
         except Exception as e:
             logger.error(f"Error flushing {type(target).__name__}: {e}", exc_info=True)
+
+
+def install_signal_handlers(
+    signals: Iterable[int] = (signal.SIGTERM,), timeout: float = 5.0
+) -> None:
+    """
+    Flush telemetry on SIGTERM, then carry on as the process would have.
+
+    A SIGTERM kills a bare Python process without running ``atexit``, which loses
+    the last batch. Servers like uvicorn and gunicorn handle it themselves, so you
+    only need this for workers and scripts. Any handler already installed still
+    runs. Call from the main thread.
+
+    Args:
+        signals: Signals to handle.
+        timeout: Maximum time to wait per provider, in seconds.
+    """
+
+    def install(signum: int) -> None:
+        previous = signal.getsignal(signum)
+
+        def handler(number: int, frame: FrameType | None) -> None:
+            # On a thread, because this handler may have interrupted the main thread
+            # while it held an exporter lock that flush() needs.
+            flusher = threading.Thread(target=flush, args=(timeout,), daemon=True)
+            flusher.start()
+            flusher.join(timeout * 3)
+            if callable(previous):
+                previous(number, frame)
+            elif previous != signal.SIG_IGN:
+                signal.signal(number, signal.SIG_DFL)
+                os.kill(os.getpid(), number)
+
+        signal.signal(signum, handler)
+
+    for signum in signals:
+        install(signum)
 
 
 def _shutdown_otel_providers(timeout: float) -> None:

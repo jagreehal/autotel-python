@@ -3,6 +3,7 @@
 import sys
 from typing import Any
 
+import pytest
 from opentelemetry import _logs as otel_logs
 from opentelemetry import context, trace
 from opentelemetry import metrics as otel_metrics
@@ -102,8 +103,17 @@ def test_init_merges_existing_otel_resource() -> None:
     assert provider.resource.attributes["cloud.provider"] == "aws"
 
 
-def test_init_accepts_raw_otel_headers_string() -> None:
+def test_init_accepts_raw_otel_headers_string(monkeypatch: pytest.MonkeyPatch) -> None:
     """Raw OTel header strings should not need manual parsing during migration."""
+    captured: dict[str, str] = {}
+    init_module = sys.modules["autotel.init"]
+    real_exporter = init_module.HTTPExporter
+
+    def spy(*args: Any, headers: dict[str, str], **kwargs: Any) -> Any:
+        captured.update(headers)
+        return real_exporter(*args, headers=headers, **kwargs)
+
+    monkeypatch.setattr(init_module, "HTTPExporter", spy)
     init(
         service="test",
         endpoint="http://collector:4318",
@@ -116,9 +126,8 @@ def test_init_accepts_raw_otel_headers_string() -> None:
     batch_processors = [p for p in processors if isinstance(p, BatchSpanProcessor)]
 
     assert len(batch_processors) == 1
-    exporter = batch_processors[0].span_exporter
-    assert exporter._headers["authorization"] == "Bearer token"
-    assert exporter._headers["x-honeycomb-team"] == "abc123"
+    assert captured["authorization"] == "Bearer token"
+    assert captured["x-honeycomb-team"] == "abc123"
 
 
 def test_init_with_baggage_true() -> None:

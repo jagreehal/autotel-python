@@ -40,9 +40,9 @@ def test_trace_llm_basic(setup_tracing: Any) -> None:
     assert len(spans) == 1
 
     attrs = spans[0].attributes
-    assert attrs["gen.ai.request.model"] == "gpt-4-turbo"
-    assert attrs["gen.ai.operation.name"] == "chat"
-    assert attrs["gen.ai.system"] == "openai"
+    assert attrs["gen_ai.request.model"] == "gpt-4-turbo"
+    assert attrs["gen_ai.operation.name"] == "chat"
+    assert attrs["gen_ai.system"] == "openai"
 
 
 def test_trace_llm_with_ctx(setup_tracing: Any) -> None:
@@ -51,9 +51,9 @@ def test_trace_llm_with_ctx(setup_tracing: Any) -> None:
 
     @trace_llm(model="claude-3-opus", operation="chat", system="anthropic")
     def generate_with_ctx(ctx: Any, prompt: str) -> str:
-        ctx.set_attribute("gen.ai.usage.input_tokens", 100)
-        ctx.set_attribute("gen.ai.usage.output_tokens", 250)
-        ctx.set_attribute("gen.ai.prompt.length", len(prompt))
+        ctx.set_attribute("gen_ai.usage.input_tokens", 100)
+        ctx.set_attribute("gen_ai.usage.output_tokens", 250)
+        ctx.set_attribute("gen_ai.prompt.length", len(prompt))
         return "Response"
 
     result = generate_with_ctx("test")  # type: ignore[call-arg]
@@ -63,11 +63,11 @@ def test_trace_llm_with_ctx(setup_tracing: Any) -> None:
     assert len(spans) == 1
 
     attrs = spans[0].attributes
-    assert attrs["gen.ai.request.model"] == "claude-3-opus"
-    assert attrs["gen.ai.operation.name"] == "chat"
-    assert attrs["gen.ai.system"] == "anthropic"
-    assert attrs["gen.ai.usage.input_tokens"] == 100
-    assert attrs["gen.ai.usage.output_tokens"] == 250
+    assert attrs["gen_ai.request.model"] == "claude-3-opus"
+    assert attrs["gen_ai.operation.name"] == "chat"
+    assert attrs["gen_ai.system"] == "anthropic"
+    assert attrs["gen_ai.usage.input_tokens"] == 100
+    assert attrs["gen_ai.usage.output_tokens"] == 250
 
 
 @pytest.mark.asyncio
@@ -77,8 +77,8 @@ async def test_trace_llm_async(setup_tracing: Any) -> None:
 
     @trace_llm(model="gpt-4-turbo", operation="embedding", system="openai")
     async def embed_text(ctx: Any, text: str) -> list[float]:
-        ctx.set_attribute("gen.ai.response.dimensions", 1536)
-        ctx.set_attribute("gen.ai.request.input_length", len(text))
+        ctx.set_attribute("gen_ai.response.dimensions", 1536)
+        ctx.set_attribute("gen_ai.request.input_length", len(text))
         return [0.1, 0.2, 0.3]
 
     result = await embed_text("test")  # type: ignore[call-arg]
@@ -88,9 +88,9 @@ async def test_trace_llm_async(setup_tracing: Any) -> None:
     assert len(spans) == 1
 
     attrs = spans[0].attributes
-    assert attrs["gen.ai.request.model"] == "gpt-4-turbo"
-    assert attrs["gen.ai.operation.name"] == "embedding"
-    assert attrs["gen.ai.response.dimensions"] == 1536
+    assert attrs["gen_ai.request.model"] == "gpt-4-turbo"
+    assert attrs["gen_ai.operation.name"] == "embedding"
+    assert attrs["gen_ai.response.dimensions"] == 1536
 
 
 def test_trace_llm_with_custom_attributes(setup_tracing: Any) -> None:
@@ -112,7 +112,7 @@ def test_trace_llm_with_custom_attributes(setup_tracing: Any) -> None:
     assert len(spans) == 1
 
     attrs = spans[0].attributes
-    assert attrs["gen.ai.request.model"] == "gpt-4-turbo"
+    assert attrs["gen_ai.request.model"] == "gpt-4-turbo"
     assert attrs["custom.key"] == "custom_value"
     assert attrs["priority"] == 1
 
@@ -131,9 +131,9 @@ def test_trace_llm_without_system(setup_tracing: Any) -> None:
     assert len(spans) == 1
 
     attrs = spans[0].attributes
-    assert attrs["gen.ai.request.model"] == "custom-model"
-    assert attrs["gen.ai.operation.name"] == "completion"
-    assert "gen.ai.system" not in attrs  # Should not be set
+    assert attrs["gen_ai.request.model"] == "custom-model"
+    assert attrs["gen_ai.operation.name"] == "completion"
+    assert "gen_ai.system" not in attrs  # Should not be set
 
 
 def test_trace_llm_custom_name(setup_tracing: Any) -> None:
@@ -172,9 +172,9 @@ def test_trace_db_basic(setup_tracing: Any) -> None:
     assert len(spans) == 1
 
     attrs = spans[0].attributes
-    assert attrs["db.system"] == "postgresql"
-    assert attrs["db.operation"] == "SELECT"
-    assert attrs["db.name"] == "production"
+    assert attrs["db.system.name"] == "postgresql"
+    assert attrs["db.operation.name"] == "SELECT"
+    assert attrs["db.namespace"] == "production"
 
 
 def test_trace_db_with_collection(setup_tracing: Any) -> None:
@@ -194,9 +194,9 @@ def test_trace_db_with_collection(setup_tracing: Any) -> None:
     assert len(spans) == 1
 
     attrs = spans[0].attributes
-    assert attrs["db.system"] == "mongodb"
-    assert attrs["db.operation"] == "find"
-    assert attrs["db.name"] == "app_db"
+    assert attrs["db.system.name"] == "mongodb"
+    assert attrs["db.operation.name"] == "find"
+    assert attrs["db.namespace"] == "app_db"
     assert attrs["db.collection.name"] == "users"
 
 
@@ -217,8 +217,8 @@ async def test_trace_db_async(setup_tracing: Any) -> None:
     spans = exporter.get_finished_spans()
     assert len(spans) == 1
     attrs = spans[0].attributes
-    assert attrs["db.system"] == "redis"
-    assert attrs["db.operation"] == "get"
+    assert attrs["db.system.name"] == "redis"
+    assert attrs["db.operation.name"] == "get"
     assert attrs["db.redis.key"] == "user:123"
     assert attrs["cache.hit"] is True
 
@@ -237,7 +237,7 @@ def test_trace_db_minimal(setup_tracing: Any) -> None:
     assert len(spans) == 1
 
     attrs = spans[0].attributes
-    assert attrs["db.system"] == "sqlite"
+    assert attrs["db.system.name"] == "sqlite"
     assert "db.operation" not in attrs
     assert "db.name" not in attrs
 
