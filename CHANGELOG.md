@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-08
+
 ### Changed
 - `RedactPiiProcessor` and `RedactPiiLogProcessor` work on providers you build yourself, with no `init()` call.
 - Redacted spans are plain `ReadableSpan` copies, so `ConsoleSpanExporter` and other `to_json()` users print scrubbed values.
