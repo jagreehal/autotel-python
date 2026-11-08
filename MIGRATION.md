@@ -862,7 +862,7 @@ Use this checklist to track your migration progress:
 - **Documentation**: [README.md](./README.md)
 - **Examples**: [examples/](./examples/)
 - **Comparison examples**: [examples/comparison/](./examples/comparison/)
-- **Issues**: [GitHub Issues](https://github.com/yourusername/autotel/issues)
+- **Issues**: [GitHub Issues](https://github.com/jagreehal/autotel-python/issues)
 
 ## Results
 

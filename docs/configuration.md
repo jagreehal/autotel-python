@@ -97,7 +97,7 @@ you use it; defaults stay sensible and quiet.
 | `span_filter` | — | Predicate `(span) -> bool`; return `True` to keep a completed span. |
 | `span_name_normalizer` | — | Normalize span names (callable or preset: `rest-api`, `graphql`, `minimal`). |
 | `attribute_redactor` | — | PII/attribute redaction (config, preset `default`/`strict`/`pci-dss`, or callable). |
-| `redact_pii` | `False` | Scrub span attributes, span events, logs and `track()` events at export, and drop client IPs. |
+| `redact_pii` | `False` | Scrub span attributes, span events, logs (structured bodies too) and `track()` events at export, and drop client IPs. |
 | `log_file` | — | Rolling log files, e.g. `LogFile("logs", rotation="hourly")`. `AUTOTEL_LOG_FILE_DIR` turns this on with no code. |
 | `json_logs` | `False` | Print JSON lines with `trace_id` and `span_id` to stdout. |
 

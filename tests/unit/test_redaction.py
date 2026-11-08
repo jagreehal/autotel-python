@@ -6,13 +6,21 @@ from typing import Any
 
 import pytest
 from opentelemetry import trace
-from opentelemetry.sdk._logs import ReadableLogRecord
+from opentelemetry.sdk._logs import LoggerProvider, ReadableLogRecord
 from opentelemetry.sdk._logs.export import (
     InMemoryLogRecordExporter,
     SimpleLogRecordProcessor,
 )
+from opentelemetry.sdk.trace import SpanLimits, TracerProvider
 
-from autotel import InMemorySpanExporter, SimpleSpanProcessor, init, track
+from autotel import (
+    InMemorySpanExporter,
+    RedactPiiLogProcessor,
+    RedactPiiProcessor,
+    SimpleSpanProcessor,
+    init,
+    track,
+)
 from autotel.events import Event
 from autotel.redaction import pii_key, redact_query, redact_url, scrub_text, set_redact_pii
 from autotel.track import set_event
@@ -174,3 +182,48 @@ def test_business_events_are_scrubbed() -> None:
     assert seen[0]["user"]["email"] == "[REDACTED]"
     assert seen[0]["note"] == "from [REDACTED]"
     assert seen[0]["n"] == 1
+
+
+def test_standalone_processor_scrubs_without_init_and_to_json() -> None:
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(RedactPiiProcessor(SimpleSpanProcessor(exporter)))
+
+    with provider.get_tracer("t").start_as_current_span("login") as span:
+        span.set_attribute("password", "hunter2")
+
+    (finished,) = exporter.get_finished_spans()
+    assert finished.attributes["password"] == "[REDACTED]"
+    assert "hunter2" not in finished.to_json()
+
+
+def test_redacted_span_keeps_dropped_counts() -> None:
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider(span_limits=SpanLimits(max_attributes=1, max_events=1))
+    provider.add_span_processor(RedactPiiProcessor(SimpleSpanProcessor(exporter)))
+
+    with provider.get_tracer("t").start_as_current_span("work") as span:
+        span.set_attributes({"a": 1, "b": 2})
+        span.add_event("one")
+        span.add_event("two")
+
+    (finished,) = exporter.get_finished_spans()
+    assert (finished.dropped_attributes, finished.dropped_events) == (1, 1)
+
+
+def test_structured_log_bodies_are_scrubbed() -> None:
+    exporter = InMemoryLogRecordExporter()
+    provider = LoggerProvider()
+    provider.add_log_record_processor(RedactPiiLogProcessor())
+    provider.add_log_record_processor(SimpleLogRecordProcessor(exporter))
+
+    provider.get_logger("app").emit(
+        body={"email": "jo@example.com", "items": [{"password": "hunter2"}], "n": 1}
+    )
+
+    (finished,) = exporter.get_finished_logs()
+    assert finished.log_record.body == {
+        "email": "[REDACTED]",
+        "items": [{"password": "[REDACTED]"}],
+        "n": 1,
+    }

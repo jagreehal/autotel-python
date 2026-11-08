@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `RedactPiiProcessor` and `RedactPiiLogProcessor` work on providers you build yourself, with no `init()` call.
+- Redacted spans are plain `ReadableSpan` copies, so `ConsoleSpanExporter` and other `to_json()` users print scrubbed values.
+- `RedactPiiLogProcessor` scrubs dict and list log bodies key by key.
+- gRPC handlers run with the caller's baggage, and it propagates to downstream calls.
+
 ## [0.9.0] - 2026-11-04
 
 ### Added

@@ -45,7 +45,8 @@ init(
 | Incoming HTTP on FastAPI or Starlette | `app.add_middleware(autotelMiddleware)` |
 | Incoming HTTP on Flask | `init_autotel(app, skip_routes=["/health"])` |
 | Incoming HTTP on Django | `autotel.integrations.django.autotelMiddleware` plus an `AUTOTEL` setting |
-| Incoming gRPC | `grpc.server(pool, interceptors=[server_interceptor()])`, or `aio_server_interceptor()` |
+| Incoming gRPC | `grpc.server(pool, interceptors=[server_interceptor()])`, or `aio_server_interceptor()`. Handlers see the caller's baggage |
+| Redaction on your own providers | `RedactPiiProcessor(inner)` and `RedactPiiLogProcessor()` |
 | Skip health checks on FastAPI 0.142+ | `FastAPI(telemetry={"exclude": lambda scope: scope["path"] == "/health"})` |
 | Outgoing HTTP | `await fetch("GET", url)`, or `trace_http_request` with `inject_trace_context()` |
 | Incoming context by hand | `extract_trace_context(headers)` from `autotel.http` |
