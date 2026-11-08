@@ -7,7 +7,7 @@ from typing import Any
 
 import grpc
 import pytest
-from opentelemetry import trace
+from opentelemetry import baggage, trace
 from opentelemetry.trace import SpanKind, StatusCode
 
 from autotel import InMemorySpanExporter, SimpleSpanProcessor, init
@@ -95,6 +95,24 @@ def test_unary_joins_the_caller_and_parents_handler_spans(channel: Any, exporter
     assert span.attributes["rpc.method"] == "test.Echo/Unary"
     assert span.attributes["rpc.status_code"] == "OK"
     assert span.attributes["client.address"] == "127.0.0.1"
+
+
+def test_handler_sees_incoming_baggage(exporter: Any) -> None:
+    seen: list[Any] = []
+
+    def read_baggage(request: bytes, context: Any) -> bytes:
+        seen.append(baggage.get_baggage("tenant"))
+        return request
+
+    server = grpc.server(futures.ThreadPoolExecutor(2), interceptors=[server_interceptor()])
+    server.add_generic_rpc_handlers((handlers(unary_fn=read_baggage),))
+    port = server.add_insecure_port("127.0.0.1:0")
+    server.start()
+    with grpc.insecure_channel(f"127.0.0.1:{port}") as open_channel:
+        call(open_channel, "Unary", metadata=(("baggage", "tenant=acme"),))
+    server.stop(None)
+
+    assert seen == ["acme"]
 
 
 def test_client_fault_is_not_a_span_error(channel: Any, exporter: Any) -> None:

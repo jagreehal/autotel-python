@@ -7,9 +7,11 @@ from collections.abc import Mapping
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
+from opentelemetry.attributes import BoundedAttributes
 from opentelemetry.context import Context
 from opentelemetry.sdk._logs import LogRecordProcessor, ReadWriteLogRecord
 from opentelemetry.sdk.trace import Event, ReadableSpan, Span, SpanProcessor
+from opentelemetry.sdk.util import BoundedList
 from opentelemetry.trace import Status, StatusCode
 
 REDACTED = "[REDACTED]"
@@ -126,25 +128,40 @@ def redact_attributes(attributes: Mapping[str, Any] | None) -> dict[str, Any]:
     }
 
 
-class _RedactedSpan:
-    """A finished span as the exporter should see it."""
-
-    def __init__(self, span: ReadableSpan) -> None:
-        self._span = span
-        self.attributes = redact_attributes(span.attributes)
-        self.events = tuple(
+def _redacted_span(span: ReadableSpan) -> ReadableSpan:
+    """A scrubbed copy of a finished span."""
+    description = span.status.description
+    status = (
+        Status(StatusCode.ERROR, scrub_text(description))
+        if description and span.status.status_code is StatusCode.ERROR
+        else span.status
+    )
+    attributes = BoundedAttributes(attributes=redact_attributes(span.attributes), immutable=True)
+    attributes.dropped = span.dropped_attributes
+    events = BoundedList.from_seq(
+        None,
+        [
             Event(scrub_text(event.name), redact_attributes(event.attributes), event.timestamp)
             for event in span.events
-        )
-        description = span.status.description
-        self.status = (
-            Status(StatusCode.ERROR, scrub_text(description))
-            if description and span.status.status_code is StatusCode.ERROR
-            else span.status
-        )
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._span, name)
+        ],
+    )
+    events.dropped = span.dropped_events
+    links = BoundedList.from_seq(None, span.links)
+    links.dropped = span.dropped_links
+    return ReadableSpan(
+        name=span.name,
+        context=span.context,
+        parent=span.parent,
+        resource=span.resource,
+        attributes=attributes,
+        events=events,
+        links=links,
+        kind=span.kind,
+        status=status,
+        start_time=span.start_time,
+        end_time=span.end_time,
+        instrumentation_scope=span.instrumentation_scope,
+    )
 
 
 class RedactPiiProcessor(SpanProcessor):
@@ -157,7 +174,7 @@ class RedactPiiProcessor(SpanProcessor):
         self.inner.on_start(span, parent_context)
 
     def on_end(self, span: ReadableSpan) -> None:
-        self.inner.on_end(_RedactedSpan(span) if _enabled else span)  # type: ignore[arg-type]
+        self.inner.on_end(_redacted_span(span))
 
     def shutdown(self) -> None:
         self.inner.shutdown()
@@ -170,11 +187,8 @@ class RedactPiiLogProcessor(LogRecordProcessor):
     """Scrub log records in place. Register it before the exporting processor."""
 
     def on_emit(self, log_record: ReadWriteLogRecord) -> None:
-        if not _enabled:
-            return
         record = log_record.log_record
-        if isinstance(record.body, str):
-            record.body = scrub_text(record.body)
+        record.body = redact_value("", record.body)
         record.attributes = redact_attributes(record.attributes)
 
     def shutdown(self) -> None:

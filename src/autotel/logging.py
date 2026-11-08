@@ -60,8 +60,7 @@ class LogFile:
     """
     Rolling log files in ``directory``. Give each service its own directory.
 
-    ponytail: writes happen on the logging thread, so a slow disk slows the caller.
-    Add a QueueHandler if that shows up.
+    Writes happen on the logging thread. For a slow disk, add a QueueHandler.
 
     Args:
         directory: Created if missing.

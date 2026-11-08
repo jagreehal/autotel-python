@@ -94,7 +94,7 @@ class DevtoolsConfig:
 
 
 def _resolve_devtools_config(config: bool | Mapping[str, Any] | None) -> DevtoolsConfig:
-    """Resolve the TypeScript-style devtools shortcut."""
+    """Resolve the ``devtools`` local OTLP shortcut."""
     default_host = "127.0.0.1"
     default_port = 4318
 

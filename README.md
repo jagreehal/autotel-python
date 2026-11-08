@@ -1177,7 +1177,7 @@ server = grpc.server(futures.ThreadPoolExecutor(), interceptors=[server_intercep
 aio_server = grpc.aio.server(interceptors=[aio_server_interceptor()])
 ```
 
-Each call gets a SERVER span named `package.Service/Method`, joined to the caller's trace, with `rpc.method`, `rpc.status_code` and `rpc.server.call.duration`. The span stays open for the whole stream. Only codes that are the server's fault (`INTERNAL`, `UNAVAILABLE` and so on) mark it as an error. An unknown method becomes `rpc.method: _OTHER` on a span named `grpc`.
+Each call gets a SERVER span named `package.Service/Method`, joined to the caller's trace and baggage, with `rpc.method`, `rpc.status_code` and `rpc.server.call.duration`. The span stays open for the whole stream. Only codes that are the server's fault (`INTERNAL`, `UNAVAILABLE` and so on) mark it as an error. An unknown method becomes `rpc.method: _OTHER` on a span named `grpc`.
 
 ## Log Files
 
@@ -1401,7 +1401,7 @@ breaker = CircuitBreaker(
 
 ### PII Redaction
 
-`init(service="my-app", redact_pii=True)` scrubs everything at export: span attributes, span events, exception text, logs and `track()` events. It removes emails, Luhn-valid card numbers, bearer tokens and values under keys like `password`, hides `url.query` values and URL credentials, and drops client IP attributes. `RedactPiiProcessor` does the same for a tracer provider you build yourself.
+`init(service="my-app", redact_pii=True)` scrubs everything at export: span attributes, span events, exception text, log messages and structured log bodies, and `track()` events. It removes emails, Luhn-valid card numbers, bearer tokens and values under keys like `password`, hides `url.query` values and URL credentials, and drops client IP attributes. `RedactPiiProcessor` and `RedactPiiLogProcessor` do the same for providers you build yourself.
 
 For finer control over span attributes, use `attribute_redactor`, or `PIIRedactor` directly:
 

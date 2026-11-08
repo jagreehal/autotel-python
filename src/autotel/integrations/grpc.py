@@ -16,6 +16,7 @@ from typing import Any
 
 import grpc
 from grpc import aio
+from opentelemetry import context as otel_context
 from opentelemetry import trace
 from opentelemetry.trace import SpanKind, StatusCode
 
@@ -60,9 +61,10 @@ class _Call:
         self.trust_forwarded_for = trust_forwarded_for
         self.started = perf_counter()
         self.finished = False
+        self.parent_context = extract_trace_context(self._text_metadata())
         self.span = trace.get_tracer("autotel").start_span(
             method,
-            context=extract_trace_context(self._text_metadata()),
+            context=self.parent_context,
             kind=SpanKind.SERVER,
             attributes={"rpc.system.name": "grpc"},
         )
@@ -82,10 +84,11 @@ class _Call:
 
     @contextmanager
     def active(self) -> Iterator[None]:
-        with trace.use_span(
-            self.span, end_on_exit=False, record_exception=False, set_status_on_exception=False
-        ):
+        token = otel_context.attach(trace.set_span_in_context(self.span, self.parent_context))
+        try:
             yield
+        finally:
+            otel_context.detach(token)
 
     def finish(self, code: grpc.StatusCode, error: BaseException | None = None) -> None:
         if self.finished:

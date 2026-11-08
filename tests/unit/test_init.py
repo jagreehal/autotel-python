@@ -350,7 +350,7 @@ def test_init_debug_with_explicit_endpoint_has_otlp() -> None:
 
 
 def test_init_devtools_true_uses_local_otlp_http_endpoint() -> None:
-    """devtools=True should mirror the TypeScript local-dev shortcut."""
+    """devtools=True exports to a local OTLP HTTP endpoint."""
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
