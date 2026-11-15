@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-15
+
 ### Added
 - `@trace` records Result return values (anything with `is_err()`): `result.ok` on the span, plus `error.type` and a `result.err` event for an `Err`.
 - `fail_on_err=True` on `@trace` sets the span status to error for an `Err`.
