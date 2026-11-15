@@ -186,3 +186,149 @@ def test_trace_preserves_other_context_parameters(exporter: Any) -> None:
     # Verify the function still works
     result = handler("some-context", 123)
     assert result == {"context": "some-context", "user_id": 123}
+
+
+# --- Result-returning functions (anything with is_err()) ---
+
+
+class _Ok:
+    def __init__(self, value: Any) -> None:
+        self.value = value
+
+    def is_err(self) -> bool:
+        return False
+
+
+class _Err:
+    def __init__(self, error: Any) -> None:
+        self.error = error
+
+    def is_err(self) -> bool:
+        return True
+
+
+def test_trace_records_returned_err_without_failing_span(exporter: Any) -> None:
+    """An Err is returned, not raised: it must still show on the span."""
+    from opentelemetry.trace import StatusCode
+
+    @trace
+    def find_item(sku: str) -> Any:
+        return _Err(KeyError(sku))
+
+    result = find_item("sku-9")
+    assert isinstance(result, _Err)  # the return value is untouched
+    (span,) = exporter.get_finished_spans()
+    assert span.attributes["result.ok"] is False
+    assert span.attributes["error.type"] == "KeyError"
+    (event,) = span.events
+    assert event.name == "result.err"
+    assert event.attributes["error.message"] == "'sku-9'"
+    assert span.status.status_code == StatusCode.UNSET  # expected outcome, not a fault
+
+
+def test_trace_fail_on_err_marks_span_as_error(exporter: Any) -> None:
+    from opentelemetry.trace import StatusCode
+
+    @trace(fail_on_err=True)
+    def charge() -> Any:
+        return _Err(ValueError("card declined"))
+
+    charge()
+    (span,) = exporter.get_finished_spans()
+    assert span.status.status_code == StatusCode.ERROR
+    assert span.status.description == "ValueError: card declined"
+
+
+def test_trace_records_ok(exporter: Any) -> None:
+    @trace
+    def price() -> Any:
+        return _Ok(1200)
+
+    price()
+    (span,) = exporter.get_finished_spans()
+    assert span.attributes["result.ok"] is True
+    assert "error.type" not in span.attributes
+    assert not span.events
+
+
+@pytest.mark.asyncio
+async def test_trace_records_err_from_async_function(exporter: Any) -> None:
+    @trace("orders.save", fail_on_err=True)
+    async def save() -> Any:
+        return _Err(OSError("db down"))
+
+    await save()
+    (span,) = exporter.get_finished_spans()
+    assert span.name == "orders.save"
+    assert span.attributes["error.type"] == "OSError"
+
+
+def test_trace_wrapping_form_accepts_fail_on_err(exporter: Any) -> None:
+    from opentelemetry.trace import StatusCode
+
+    traced = trace("pin.verify", lambda: _Err(PermissionError("wrong pin")), fail_on_err=True)
+    traced()
+    (span,) = exporter.get_finished_spans()
+    assert span.status.status_code == StatusCode.ERROR
+
+
+def test_trace_reads_the_result_packages_err_value(exporter: Any) -> None:
+    class ResultPackageErr:
+        err_value = "not found"
+
+        def is_err(self) -> bool:
+            return True
+
+    trace(lambda: ResultPackageErr())()
+    (span,) = exporter.get_finished_spans()
+    assert span.attributes["error.type"] == "str"
+    assert span.events[0].attributes["error.message"] == "not found"
+
+
+def test_trace_ignores_values_that_only_look_like_results(exporter: Any) -> None:
+    from unittest.mock import MagicMock
+
+    class NotCallable:
+        is_err = True
+
+    class NotBool:
+        def is_err(self) -> str:
+            return "yes"
+
+    class Raises:
+        def is_err(self) -> bool:
+            raise RuntimeError("boom")
+
+    class IsErrPropertyRaises:
+        @property
+        def is_err(self) -> Any:
+            raise RuntimeError("boom")
+
+    class ErrorPropertyRaises:
+        def is_err(self) -> bool:
+            return True
+
+        @property
+        def error(self) -> Any:
+            raise RuntimeError("boom")
+
+    class Unprintable:
+        def __str__(self) -> str:
+            raise RuntimeError("boom")
+
+    values = (
+        MagicMock(),
+        NotCallable(),
+        NotBool(),
+        Raises(),
+        IsErrPropertyRaises(),
+        ErrorPropertyRaises(),
+        _Err(Unprintable()),
+        None,
+        3,
+    )
+    for value in values:
+        assert trace(lambda value=value: value, fail_on_err=True)() is value
+    for span in exporter.get_finished_spans():
+        assert "result.ok" not in (span.attributes or {})
+        assert not span.events

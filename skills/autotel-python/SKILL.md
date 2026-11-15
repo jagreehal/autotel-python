@@ -40,6 +40,7 @@ init(
 | Need | API |
 | --- | --- |
 | Span around a function | `@trace`, with an optional first `ctx` parameter |
+| Record a returned `Ok`/`Err` | `@trace` sets `result.ok`; add `fail_on_err=True` to set error status on an `Err` |
 | Span around a block | `with span("name") as ctx:` |
 | Attributes and events | `ctx.set_attribute(k, v)`, `ctx.add_event(name, attrs)` |
 | Incoming HTTP on FastAPI or Starlette | `app.add_middleware(autotelMiddleware)` |

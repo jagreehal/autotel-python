@@ -6,7 +6,7 @@ from collections.abc import Callable
 from typing import Any, ParamSpec, TypeVar, overload
 
 from opentelemetry import trace as otel_trace
-from opentelemetry.trace import StatusCode
+from opentelemetry.trace import Span, StatusCode
 
 from .context import TraceContext
 from .operation_context import run_in_operation_context
@@ -36,11 +36,43 @@ def _rewrite_signature_without_ctx(
     wrapper.__signature__ = original_sig.replace(parameters=new_params)  # type: ignore[attr-defined]
 
 
+def _record_result(span: Span, result: object, fail_on_err: bool) -> None:
+    """Record a Result-style return value: anything with an ``is_err()`` method.
+
+    An ``Err`` is returned, not raised, so the span needs it recorded here. The status
+    stays unset unless ``fail_on_err``, since an ``Err`` is often an expected outcome.
+    """
+    # Inspection runs user code (properties, __str__), so read it all before touching the span.
+    try:
+        is_err = getattr(result, "is_err", None)
+        if not callable(is_err):
+            return
+        failed = is_err()
+        if not isinstance(failed, bool):  # e.g. a mock
+            return
+        if failed:
+            error = getattr(result, "error", None)
+            if error is None:
+                error = getattr(result, "err_value", None)
+            error_type = type(error).__name__ if error is not None else "Err"
+            message = str(error)
+    except Exception:
+        return
+    span.set_attribute("result.ok", not failed)
+    if not failed:
+        return
+    span.set_attribute("error.type", error_type)
+    span.add_event("result.err", {"error.type": error_type, "error.message": message})
+    if fail_on_err:
+        span.set_status(StatusCode.ERROR, f"{error_type}: {message}")
+
+
 @overload
 def trace(
     func: Callable[P, R],
     *,
     name: str | None = None,
+    fail_on_err: bool = False,
 ) -> Callable[P, R]: ...
 
 
@@ -49,6 +81,7 @@ def trace(
     func: str | None = None,
     *,
     name: str | None = None,
+    fail_on_err: bool = False,
 ) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
 
 
@@ -56,6 +89,8 @@ def trace(
 def trace(
     func: str,
     wrapped: Callable[P, R],
+    *,
+    fail_on_err: bool = False,
 ) -> Callable[P, R]: ...
 
 
@@ -64,6 +99,7 @@ def trace(
     wrapped: Callable[P, R] | None = None,
     *,
     name: str | None = None,
+    fail_on_err: bool = False,
 ) -> Callable[P, R] | Callable[[Callable[P, R]], Callable[P, R]]:
     """
     Decorator that wraps a function with automatic span lifecycle.
@@ -86,6 +122,15 @@ def trace(
         >>> async def create_user(ctx, data: dict[str, Any]):
         ...     ctx.set_attribute('user.email', data['email'])
         ...     return await db.users.create(data)
+
+    Result-returning functions (anything with an ``is_err()`` method)
+    get ``result.ok`` on the span; an ``Err`` also gets ``error.type`` and a
+    ``result.err`` event. The span status stays unset for an ``Err``, since it is
+    usually an expected outcome. Pass ``fail_on_err=True`` to mark it as an error:
+
+        >>> @trace(fail_on_err=True)
+        >>> def charge(card: Card, total: int) -> Result[Receipt, CardDeclined]:
+        ...     ...
     """
 
     # `trace("span.name", fn)`: wrap immediately.
@@ -120,8 +165,9 @@ def trace(
                         if needs_ctx:
                             ctx = TraceContext(span)
                             result = await fn(ctx, *args, **kwargs)  # type: ignore[arg-type]
-                            return result  # type: ignore[no-any-return]
-                        result = await fn(*args, **kwargs)
+                        else:
+                            result = await fn(*args, **kwargs)
+                        _record_result(span, result, fail_on_err)
                         return result  # type: ignore[no-any-return]
                     except Exception as e:
                         span.record_exception(e)
@@ -145,8 +191,9 @@ def trace(
                         if needs_ctx:
                             ctx = TraceContext(span)
                             result = fn(ctx, *args, **kwargs)  # type: ignore[arg-type]
-                            return result
-                        result = fn(*args, **kwargs)
+                        else:
+                            result = fn(*args, **kwargs)
+                        _record_result(span, result, fail_on_err)
                         return result
                     except Exception as e:
                         span.record_exception(e)

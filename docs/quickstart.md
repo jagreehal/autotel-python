@@ -145,6 +145,12 @@ async def create_user(ctx, data: dict):
     ctx.set_attribute("user.email", data["email"])
     ctx.set_attribute("user.id", data["id"])
     return await db.users.create(data)
+
+
+@trace(fail_on_err=True)
+def charge(card, total):
+    """Returns Ok/Err. The span gets result.ok; an Err also sets error status."""
+    return gateway.charge(card, total)
 ```
 
 ### Manual Span Creation
