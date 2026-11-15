@@ -352,6 +352,23 @@ Wrap an existing function without the decorator syntax:
 verify_pin = trace("bank.verify_pin", verify_pin)
 ```
 
+#### Result-returning functions
+
+If your function returns a Result value with an `is_err()` method, `@trace` sets `result.ok` on the span. For an `Err` it also sets `error.type` and adds a `result.err` event, reading the error from `.error` or `.err_value`.
+
+An `Err` leaves the span status unset by default, because a declined card or a missing record is usually an expected outcome. Pass `fail_on_err=True` to mark the span as an error, with either form:
+
+```python
+@trace(fail_on_err=True)
+def charge(card: Card, total: int) -> Result[Receipt, CardDeclined]: ...
+```
+
+```python
+charge = trace("payments.charge", charge, fail_on_err=True)
+```
+
+`@trace` returns the value unchanged. If reading it raises (in `is_err()`, `.error` or `str(error)`), the span skips the result attributes.
+
 ### Wide events with `get_request_logger()`
 
 Collect fields as a request runs and land them on one span as dotted attributes:
